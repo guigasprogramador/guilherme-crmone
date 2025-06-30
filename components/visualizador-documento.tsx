@@ -18,24 +18,49 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { FileText, Download, Calendar, User, Tag, Building, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { PDFViewer } from "@/components/documentos/pdf-viewer"
 
 interface Documento {
-  id: string
-  nome: string
-  tipo: string
-  tipoId: string
-  categoria: string
-  categoriaId: string
-  licitacao: string
-  licitacaoId: string
-  dataUpload: string
-  tamanho: string
-  conteudo?: string
+  id: string;
+  nome: string;
+  tipo: string;
+  formato: string;
+  tags: string[];        // Substituindo categorias por tags para manter consistência
+  licitacao?: string;
+  licitacaoId?: string;
+  dataUpload?: string;
+  uploadPor?: string;
+  resumo?: string;
+  url?: string;
+  arquivo_path?: string;
+  tamanho?: string | number;
+  dataValidade?: string;
+  descricao?: string;
+  conteudo?: string;
+  categoria?: string;
+  categoriaId?: string;
 }
 
 interface VisualizadorDocumentoProps {
   documento: Documento
   trigger?: React.ReactNode
+}
+
+// Função para corrigir URLs do Cloudinary
+function getCorrectUrl(url: string): string {
+  if (!url) return url;
+  
+  // Remove extensões duplicadas como .pdf.raw
+  let correctedUrl = url.replace(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx)\.raw$/i, '.$1');
+  
+  // Para URLs do Cloudinary, converter /image/upload/ para /raw/upload/ para PDFs
+  if (correctedUrl.includes('cloudinary.com') && correctedUrl.includes('/image/upload/')) {
+    if (correctedUrl.toLowerCase().includes('.pdf')) {
+      correctedUrl = correctedUrl.replace('/image/upload/', '/raw/upload/');
+    }
+  }
+  
+  return correctedUrl;
 }
 
 export function VisualizadorDocumento({ documento, trigger }: VisualizadorDocumentoProps) {
@@ -59,17 +84,34 @@ export function VisualizadorDocumento({ documento, trigger }: VisualizadorDocume
 
   // Determinar a URL de visualização com base no tipo de arquivo
   const getPreviewUrl = () => {
-    if (documento.nome.endsWith(".pdf")) {
-      return `https://docs.google.com/viewer?url=${encodeURIComponent("https://example.com/docs/" + documento.nome)}&embedded=true`
-    } else if (
-      documento.nome.endsWith(".docx") ||
-      documento.nome.endsWith(".doc") ||
-      documento.nome.endsWith(".xlsx") ||
-      documento.nome.endsWith(".xls")
-    ) {
-      return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent("https://example.com/docs/" + documento.nome)}`
+    const documentUrl = documento.url || documento.arquivo_path
+    
+    if (!documentUrl) {
+      return null
     }
-    return null
+    
+    // Corrigir URL do Cloudinary se necessário (trocar /image/upload/ por /raw/upload/ para PDFs)
+    let correctedUrl = documentUrl
+    if (documentUrl.includes('cloudinary.com') && documentUrl.includes('/image/upload/') && 
+        (documento.nome.toLowerCase().endsWith('.pdf') || documento.formato?.toLowerCase() === 'pdf')) {
+      correctedUrl = documentUrl.replace('/image/upload/', '/raw/upload/')
+    }
+    
+    if (documento.nome.toLowerCase().endsWith(".pdf") || documento.formato?.toLowerCase() === 'pdf') {
+      // Para PDFs, usar diretamente a URL do Cloudinary
+      return correctedUrl
+    } else if (
+      documento.nome.toLowerCase().endsWith(".docx") ||
+      documento.nome.toLowerCase().endsWith(".doc") ||
+      documento.nome.toLowerCase().endsWith(".xlsx") ||
+      documento.nome.toLowerCase().endsWith(".xls")
+    ) {
+      // Para documentos Office, usar o visualizador online da Microsoft
+      return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(correctedUrl)}`
+    }
+    
+    // Para outros tipos de arquivo, retornar a URL direta
+    return correctedUrl
   }
 
   const previewUrl = getPreviewUrl()
@@ -100,13 +142,25 @@ export function VisualizadorDocumento({ documento, trigger }: VisualizadorDocume
               {activeTab === "preview" && (
                 <div className="border rounded-md h-[400px] md:h-[500px] flex flex-col">
                   {previewUrl ? (
-                    <iframe src={previewUrl} className="w-full h-full border-0 rounded-md" title={documento.nome} />
+                    (documento.nome.toLowerCase().endsWith('.pdf') || documento.formato?.toLowerCase() === 'pdf') ? (
+                      <PDFViewer url={previewUrl} fileName={documento.nome} />
+                    ) : (
+                      <iframe src={previewUrl} className="w-full h-full border-0 rounded-md" title={documento.nome} />
+                    )
                   ) : (
                     <div className="flex items-center justify-center h-full bg-muted/20 p-4">
                       <div className="text-center">
                         <FileText className="h-12 md:h-16 w-12 md:w-16 mx-auto text-muted-foreground mb-4" />
                         <p className="text-muted-foreground">Visualização não disponível para este tipo de arquivo</p>
-                        <Button variant="outline" className="mt-4">
+                        <Button variant="outline" className="mt-4" onClick={() => {
+                          const downloadUrl = documento.url || documento.arquivo_path
+                          if (downloadUrl) {
+                            const correctedUrl = getCorrectUrl(downloadUrl)
+                            console.log('Visualizador - URL original:', downloadUrl);
+                            console.log('Visualizador - URL corrigida:', correctedUrl);
+                            window.open(correctedUrl, '_blank')
+                          }
+                        }}>
                           <Download className="h-4 w-4 mr-2" />
                           Baixar para visualizar
                         </Button>
@@ -207,7 +261,15 @@ export function VisualizadorDocumento({ documento, trigger }: VisualizadorDocume
             <Button variant="outline" onClick={() => setOpen(false)} className="w-full md:w-auto">
               Fechar
             </Button>
-            <Button className="w-full md:w-auto">
+            <Button className="w-full md:w-auto" onClick={() => {
+              const downloadUrl = documento.url || documento.arquivo_path
+              if (downloadUrl) {
+                const correctedUrl = getCorrectUrl(downloadUrl)
+                console.log('Visualizador Footer - URL original:', downloadUrl);
+                console.log('Visualizador Footer - URL corrigida:', correctedUrl);
+                window.open(correctedUrl, '_blank')
+              }
+            }}>
               <Download className="h-4 w-4 mr-2" />
               Baixar Documento
             </Button>

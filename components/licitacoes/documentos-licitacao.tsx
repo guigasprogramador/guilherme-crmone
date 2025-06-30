@@ -48,8 +48,36 @@ interface Documento {
   categorias: string[]
 }
 
-export function DocumentosLicitacao({ licitacaoId, isEditing }: DocumentosLicitacaoProps) {
+export default function DocumentosLicitacao({ licitacaoId, isEditing }: DocumentosLicitacaoProps) {
   const [documentos, setDocumentos] = useState<Documento[]>([])
+
+  // Função para corrigir URLs do Cloudinary
+  const getCorrectUrl = (originalUrl: string): string => {
+    if (!originalUrl) return originalUrl;
+    
+    let correctedUrl = originalUrl;
+    
+    // Remover extensões duplicadas (ex: .pdf.raw, .doc.raw, etc.)
+    const duplicatedExtensions = ['.pdf.raw', '.doc.raw', '.docx.raw', '.xls.raw', '.xlsx.raw', '.ppt.raw', '.pptx.raw'];
+    duplicatedExtensions.forEach(ext => {
+      if (correctedUrl.endsWith(ext)) {
+        correctedUrl = correctedUrl.replace(ext, ext.split('.')[1]); // Remove a parte .raw
+      }
+    });
+    
+    // Padrão mais genérico: se termina com .{ext}.raw, remover o .raw
+    const genericPattern = /\.(\w+)\.raw$/;
+    if (genericPattern.test(correctedUrl)) {
+      correctedUrl = correctedUrl.replace(genericPattern, '.$1');
+    }
+    
+    // Se a URL do Cloudinary está usando /image/upload/, converter para /raw/upload/ para PDFs
+    if (correctedUrl.includes('cloudinary.com') && correctedUrl.includes('/image/upload/')) {
+      correctedUrl = correctedUrl.replace('/image/upload/', '/raw/upload/');
+    }
+    
+    return correctedUrl;
+  }
   const [carregando, setCarregando] = useState(true)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [documentoParaExcluir, setDocumentoParaExcluir] = useState<string | null>(null)
@@ -326,19 +354,27 @@ export function DocumentosLicitacao({ licitacaoId, isEditing }: DocumentosLicita
                   <td className="px-4 py-3 text-sm text-center">
                     <div className="flex justify-center space-x-2">
                       <a
-                        href={documento.url}
+                        href={getCorrectUrl(documento.url)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-500 hover:text-blue-700"
                         title="Visualizar"
+                        onClick={() => {
+                          console.log('Licitação Visualizar - URL original:', documento.url);
+                          console.log('Licitação Visualizar - URL corrigida:', getCorrectUrl(documento.url));
+                        }}
                       >
                         <Eye className="h-4 w-4" />
                       </a>
                       <a
-                        href={documento.url}
+                        href={getCorrectUrl(documento.url)}
                         download
                         className="text-green-500 hover:text-green-700"
                         title="Download"
+                        onClick={() => {
+                          console.log('Licitação Download - URL original:', documento.url);
+                          console.log('Licitação Download - URL corrigida:', getCorrectUrl(documento.url));
+                        }}
                       >
                         <Download className="h-4 w-4" />
                       </a>

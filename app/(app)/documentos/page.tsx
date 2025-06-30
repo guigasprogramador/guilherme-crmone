@@ -9,7 +9,6 @@ import { Eye, Download, FileText, Trash2, Calendar, FileIcon } from "lucide-reac
 import { NovoDocumento } from "@/components/documentos/novo-documento"
 import { VisualizadorDocumento } from "@/components/documentos/visualizador-documento"
 import { FiltroDocumentos, DocumentoFiltros } from "@/components/documentos/filtro-documentos"
-import { DebugUrl } from "@/components/documentos/debug-url"
 import { useDocuments, DocumentType } from "@/hooks/useDocuments"
 import { useLicitacoes, Licitacao } from "@/hooks/useLicitacoes"
 import { format, addDays, isAfter, isBefore } from "date-fns"
@@ -234,12 +233,43 @@ export default function DocumentosPage() {
     }
   }
 
+  // Função para corrigir URLs do Cloudinary
+  const getCorrectUrl = (originalUrl: string): string => {
+    if (!originalUrl) return originalUrl;
+    
+    let correctedUrl = originalUrl;
+    
+    // Remover extensões duplicadas (ex: .pdf.raw, .doc.raw, etc.)
+    const duplicatedExtensions = ['.pdf.raw', '.doc.raw', '.docx.raw', '.xls.raw', '.xlsx.raw', '.ppt.raw', '.pptx.raw'];
+    duplicatedExtensions.forEach(ext => {
+      if (correctedUrl.endsWith(ext)) {
+        correctedUrl = correctedUrl.replace(ext, ext.split('.')[1]); // Remove a parte .raw
+      }
+    });
+    
+    // Padrão mais genérico: se termina com .{ext}.raw, remover o .raw
+    const genericPattern = /\.(\w+)\.raw$/;
+    if (genericPattern.test(correctedUrl)) {
+      correctedUrl = correctedUrl.replace(genericPattern, '.$1');
+    }
+    
+    // Se a URL do Cloudinary está usando /image/upload/, converter para /raw/upload/ para PDFs
+    if (correctedUrl.includes('cloudinary.com') && correctedUrl.includes('/image/upload/')) {
+      correctedUrl = correctedUrl.replace('/image/upload/', '/raw/upload/');
+    }
+    
+    return correctedUrl;
+  }
+
   // Função para fazer download do arquivo
   const handleDownload = (documento: Documento, e: React.MouseEvent) => {
     e.stopPropagation()
     
     if (documento.url) { // Check if the Cloudinary URL exists
-      window.open(documento.url, '_blank');
+      const correctedUrl = getCorrectUrl(documento.url);
+      console.log('Download - URL original:', documento.url);
+      console.log('Download - URL corrigida:', correctedUrl);
+      window.open(correctedUrl, '_blank');
     } else {
       toast({
         title: "Erro ao baixar documento",
@@ -437,11 +467,6 @@ export default function DocumentosPage() {
             )}
           </div>
         </div>
-      </div>
-
-      {/* Debug URL - Temporário para testes */}
-      <div className="mt-8">
-        <DebugUrl />
       </div>
 
       {/* Visualizador de documento */}

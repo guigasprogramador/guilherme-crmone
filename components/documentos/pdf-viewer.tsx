@@ -14,52 +14,80 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
   const [error, setError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<string>('')
   
+  // Função para corrigir a URL do Cloudinary
+  const getCorrectUrl = (originalUrl: string): string => {
+    if (!originalUrl) return originalUrl;
+    
+    let correctedUrl = originalUrl;
+    
+    // Remover extensões duplicadas (ex: .pdf.raw, .doc.raw, etc.)
+    const duplicatedExtensions = ['.pdf.raw', '.doc.raw', '.docx.raw', '.xls.raw', '.xlsx.raw', '.ppt.raw', '.pptx.raw'];
+    duplicatedExtensions.forEach(ext => {
+      if (correctedUrl.endsWith(ext)) {
+        correctedUrl = correctedUrl.replace(ext, '.' + ext.split('.')[1]); // Remove a parte .raw
+      }
+    });
+    
+    // Padrão mais genérico: se termina com .{ext}.raw, remover o .raw
+    const genericPattern = /\.(\w+)\.raw$/;
+    if (genericPattern.test(correctedUrl)) {
+      correctedUrl = correctedUrl.replace(genericPattern, '.$1');
+    }
+    
+    // Se a URL do Cloudinary está usando /image/upload/, converter para /raw/upload/ para PDFs
+    if (correctedUrl.includes('cloudinary.com') && correctedUrl.includes('/image/upload/')) {
+      correctedUrl = correctedUrl.replace('/image/upload/', '/raw/upload/');
+    }
+    
+    // Adicionar parâmetros para forçar visualização inline (não download)
+    if (correctedUrl.includes('cloudinary.com')) {
+      const separator = correctedUrl.includes('?') ? '&' : '?';
+      correctedUrl += `${separator}fl_attachment=false&fl_inline=true`;
+    }
+    
+    return correctedUrl;
+  }
+  
   useEffect(() => {
     // Debug: log da URL recebida
     console.log('PDFViewer - URL recebida:', url);
     console.log('PDFViewer - Nome do arquivo:', fileName);
     
+    const correctedUrl = getCorrectUrl(url);
+    console.log('PDFViewer - URL corrigida:', correctedUrl);
+    
     let debugText = `URL Original: ${url}\n`;
+    debugText += `URL Corrigida: ${correctedUrl}\n`;
     debugText += `Nome do arquivo: ${fileName}\n`;
     
-    // Verificar se é uma URL do Cloudinary e se está usando o resource_type correto
+    // Verificar se é uma URL do Cloudinary
     if (url.includes('cloudinary.com')) {
       if (url.includes('/image/upload/')) {
-        debugText += 'PROBLEMA: URL usando /image/upload/ para PDF\n';
-        // Converter para raw/upload para PDFs
-        const rawUrl = url.replace('/image/upload/', '/raw/upload/');
-        debugText += `URL corrigida: ${rawUrl}\n`;
-        
-        // Definir tipo para as respostas
-        type FetchResponse = Response | { status: string; error: any };
-        
-        // Testar ambas as URLs
-        Promise.all([
-          fetch(url, { method: 'HEAD' }).catch(e => ({ status: 'error', error: e.message })),
-          fetch(rawUrl, { method: 'HEAD' }).catch(e => ({ status: 'error', error: e.message }))
-        ]).then(([originalResponse, rawResponse]: [FetchResponse, FetchResponse]) => {
-          let testResults = 'Teste de URLs:\n';
-          testResults += `image/upload: ${'status' in originalResponse ? originalResponse.status : originalResponse.error}\n`;
-          testResults += `raw/upload: ${'status' in rawResponse ? rawResponse.status : rawResponse.error}\n`;
-          setDebugInfo(debugText + testResults);
-        });
-      } else if (url.includes('/raw/upload/')) {
-        debugText += 'OK: URL usando /raw/upload/ para PDF\n';
-        setDebugInfo(debugText);
+        debugText += 'PROBLEMA DETECTADO: URL usando /image/upload/ para PDF\n';
+        debugText += 'CORREÇÃO: Convertendo para /raw/upload/\n';
+      }
+      
+      if (url.endsWith('.pdf.raw')) {
+        debugText += 'PROBLEMA DETECTADO: Extensão duplicada .pdf.raw\n';
+        debugText += 'CORREÇÃO: Removendo extensão duplicada\n';
       }
     }
     
-    // Testar acesso à URL original
-    if (url) {
-      fetch(url, { method: 'HEAD' })
+    setDebugInfo(debugText);
+    
+    // Testar acesso à URL corrigida
+    if (correctedUrl) {
+      fetch(correctedUrl, { method: 'HEAD' })
         .then(response => {
-          console.log('PDFViewer - Status da URL:', response.status);
+          console.log('PDFViewer - Status da URL corrigida:', response.status);
           if (response.status === 404) {
             setError('Documento não encontrado (404)');
           } else if (response.status === 401) {
             setError('Documento não autorizado (401)');
           } else if (!response.ok) {
             setError(`Erro ${response.status}: ${response.statusText}`);
+          } else {
+            setError(null); // Limpar erro se a URL estiver OK
           }
         })
         .catch(error => {
@@ -69,7 +97,6 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
     }
     
     setLoading(true)
-    setError(null)
   }, [url])
   
   const handleIframeLoad = () => {
@@ -109,16 +136,15 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
             
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => {
-                // Se a URL original tem /image/upload/, tentar com /raw/upload/
-                const testUrl = url.includes('/image/upload/') ? url.replace('/image/upload/', '/raw/upload/') : url;
-                window.open(testUrl, "_blank");
+                const correctedUrl = getCorrectUrl(url);
+                window.open(correctedUrl, "_blank");
               }}>
                 <ExternalLink className="h-4 w-4 mr-2" />
                 Abrir no navegador
               </Button>
               <Button variant="outline" size="sm" onClick={() => {
-                const testUrl = url.includes('/image/upload/') ? url.replace('/image/upload/', '/raw/upload/') : url;
-                window.open(testUrl, "_blank");
+                const correctedUrl = getCorrectUrl(url);
+                window.open(correctedUrl, "_blank");
               }}>
                 <Download className="h-4 w-4 mr-2" />
                 Baixar
@@ -127,17 +153,16 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
           </div>
         ) : (
           <div className="w-full h-full">
-            {/* Corrigir URL para usar /raw/upload/ se necessário */}
             {(() => {
-              const correctedUrl = url.includes('/image/upload/') ? url.replace('/image/upload/', '/raw/upload/') : url;
+              const correctedUrl = getCorrectUrl(url);
               
-              // Adicionar parâmetros para melhor compatibilidade
-              const pdfUrl = `${correctedUrl}#toolbar=1&navpanes=1&scrollbar=1&view=FitH`;
+              // Usar Google Docs Viewer para melhor compatibilidade
+              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(correctedUrl)}&embedded=true`;
               
               return (
                 <div className="w-full h-full relative">
                   <iframe 
-                    src={pdfUrl}
+                    src={viewerUrl}
                     width="100%"
                     height="100%"
                     title={fileName}
@@ -145,6 +170,7 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
                     onError={handleIframeError}
                     className="w-full h-full border-0 rounded-md"
                     allow="fullscreen"
+                    sandbox="allow-scripts allow-same-origin allow-popups"
                   >
                     <div className="p-4 text-center">
                         <p>
@@ -157,21 +183,22 @@ export function PDFViewer({ url, fileName }: PDFViewerProps) {
                     </iframe>
                   </div>
                 );
-             })()}
+             })()
+            }
           </div>
         )}
       </div>
       
       <div className="flex justify-end gap-2 mt-4">
         <Button variant="outline" size="sm" onClick={() => {
-          const correctedUrl = url.includes('/image/upload/') ? url.replace('/image/upload/', '/raw/upload/') : url;
+          const correctedUrl = getCorrectUrl(url);
           window.open(correctedUrl, "_blank");
         }}>
           <ExternalLink className="h-4 w-4 mr-2" />
           Abrir em nova aba
         </Button>
         <Button variant="outline" size="sm" onClick={() => {
-          const correctedUrl = url.includes('/image/upload/') ? url.replace('/image/upload/', '/raw/upload/') : url;
+          const correctedUrl = getCorrectUrl(url);
           window.open(correctedUrl, "_blank");
         }}>
           <Download className="h-4 w-4 mr-2" />

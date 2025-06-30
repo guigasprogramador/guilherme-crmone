@@ -163,6 +163,13 @@ export async function POST(request: NextRequest) {
         }
     }
 
+    // Corrigir o formato para evitar extensões duplicadas como .pdf.raw
+    let formatoCorreto = cloudinaryResult.format || fileExt;
+    if (formatoCorreto && formatoCorreto.includes('.')) {
+      // Se o formato contém ponto, pegar apenas a primeira parte (ex: 'pdf.raw' -> 'pdf')
+      formatoCorreto = formatoCorreto.split('.')[0];
+    }
+    
     const documentoDb = {
       id: newDocumentId,
       nome: nome,
@@ -172,7 +179,7 @@ export async function POST(request: NextRequest) {
       criado_por: userIdFromToken,
       arquivo_path: cloudinaryResult.public_id, // Store Cloudinary public_id
       url_documento: cloudinaryResult.secure_url, // Store Cloudinary secure_url
-      formato: cloudinaryResult.format || fileExt, // Use format from Cloudinary or original extension
+      formato: formatoCorreto, // Use corrected format without duplicated extensions
       tamanho: cloudinaryResult.bytes || fileBuffer.length, // Use size from Cloudinary or buffer length
       status: 'ativo',
       descricao: descricao || null,

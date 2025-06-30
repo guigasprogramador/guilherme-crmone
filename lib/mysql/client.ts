@@ -21,14 +21,13 @@ pool.on('release', function (connection) {
 });
 
 // Function to get a connection from the pool
-export async function getDbConnection() {
+export async function getDbConnection(): Promise<Connection> {
   try {
     const connection = await pool.getConnection();
     console.log("MySQL connection successfully obtained from pool.");
     return connection;
   } catch (error) {
     console.error('Failed to get MySQL connection from pool:', error);
-    // Log the specific error code or message if available
     if (error instanceof Error) {
         const err = error as any; // Type assertion
         console.error('MySQL error code:', err.code);
@@ -47,12 +46,11 @@ export async function query(sql: string, params?: any[]) {
     return results;
   } catch (error) {
     console.error('Error executing query:', error);
-    // Optionally, rethrow or handle more gracefully
     throw error;
   } finally {
     if (connection) {
       try {
-        await connection.release();
+        connection.release();
       } catch (releaseError) {
         console.error('Error releasing connection:', releaseError);
       }

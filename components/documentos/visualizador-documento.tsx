@@ -43,6 +43,34 @@ export function VisualizadorDocumento({ documento, open, onOpenChange }: Visuali
 
   if (!documento) return null
 
+  // Função para corrigir URLs do Cloudinary
+  const getCorrectUrl = (originalUrl: string): string => {
+    if (!originalUrl) return originalUrl;
+    
+    let correctedUrl = originalUrl;
+    
+    // Remover extensões duplicadas (ex: .pdf.raw, .doc.raw, etc.)
+    const duplicatedExtensions = ['.pdf.raw', '.doc.raw', '.docx.raw', '.xls.raw', '.xlsx.raw', '.ppt.raw', '.pptx.raw'];
+    duplicatedExtensions.forEach(ext => {
+      if (correctedUrl.endsWith(ext)) {
+        correctedUrl = correctedUrl.replace(ext, ext.split('.')[1]); // Remove a parte .raw
+      }
+    });
+    
+    // Padrão mais genérico: se termina com .{ext}.raw, remover o .raw
+    const genericPattern = /\.(\w+)\.raw$/;
+    if (genericPattern.test(correctedUrl)) {
+      correctedUrl = correctedUrl.replace(genericPattern, '.$1');
+    }
+    
+    // Se a URL do Cloudinary está usando /image/upload/, converter para /raw/upload/ para PDFs
+    if (correctedUrl.includes('cloudinary.com') && correctedUrl.includes('/image/upload/')) {
+      correctedUrl = correctedUrl.replace('/image/upload/', '/raw/upload/');
+    }
+    
+    return correctedUrl;
+  }
+
   // Determinar a URL de visualização com base no tipo de arquivo
   const getPreviewUrl = () => {
     // Debug: log das propriedades do documento
@@ -52,8 +80,10 @@ export function VisualizadorDocumento({ documento, open, onOpenChange }: Visuali
     
     // Se temos uma URL direta para o documento, usá-la
     if (documento.url) {
-      console.log('Usando documento.url:', documento.url);
-      return documento.url;
+      const correctedUrl = getCorrectUrl(documento.url);
+      console.log('Usando documento.url original:', documento.url);
+      console.log('Usando documento.url corrigida:', correctedUrl);
+      return correctedUrl;
     }
     // Se documento.url não existir, não há URL de visualização disponível.
     // A lógica de construir a URL a partir de arquivo_path foi removida,
@@ -70,13 +100,16 @@ export function VisualizadorDocumento({ documento, open, onOpenChange }: Visuali
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] lg:max-w-[80vw] max-h-[95vh] p-5">
+      <DialogContent className="max-w-[95vw] lg:max-w-[80vw] max-h-[95vh] p-5" aria-describedby="document-viewer-description">
         <div className="overflow-auto h-full">
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <FileText className="h-5 w-5 mr-2 text-blue-500" />
               <span className="truncate">{documento.nome}</span>
             </DialogTitle>
+            <div id="document-viewer-description" className="sr-only">
+              Visualizador de documento {documento.nome} do tipo {documento.tipo}
+            </div>
           </DialogHeader>
 
           <div className="mt-4">
