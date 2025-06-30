@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=mysql://root:123456789@host.docker.internal:3306/crmone-teste
+      # MySQL Database Configuration
+      - DB_HOST=host.docker.internal
+      - DB_USER=root
+      - DB_PASSWORD=123456789
+      - DB_NAME=crmone-teste
+      - DB_PORT=3306
+      # Auth Configuration
+      - NEXTAUTH_SECRET=your-secret-key-here
+      - NEXTAUTH_URL=http://localhost:3000
+
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes: {}
+
+networks:
+  app-network:
+    driver: bridge

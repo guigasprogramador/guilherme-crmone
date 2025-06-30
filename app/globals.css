@@ -1,0 +1,224 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+
+    --radius: 0.5rem;
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Safe area support for mobile devices */
+  .h-safe-area-inset-bottom {
+    height: var(--safe-area-inset-bottom);
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+/* Estilos para o Kanban - Responsivo */
+.kanban-container {
+  display: flex;
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  gap: 0.75rem;
+  min-height: 70vh;
+  /* Mobile improvements */
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 768px) {
+  .kanban-container {
+    gap: 0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    min-height: 60vh;
+  }
+}
+
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  height: calc(70vh - 2rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 280px;
+  flex-shrink: 0;
+  background: white;
+  scroll-snap-align: start;
+}
+
+@media (max-width: 768px) {
+  .kanban-column {
+    min-width: 260px;
+    height: calc(60vh - 2rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .kanban-column {
+    min-width: 240px;
+  }
+}
+
+.kanban-column-header {
+  padding: 0.75rem;
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  background: hsl(var(--muted));
+}
+
+@media (max-width: 768px) {
+  .kanban-column-header {
+    padding: 0.5rem;
+    font-size: 0.875rem;
+  }
+}
+
+.kanban-column-content {
+  flex: 1;
+  padding: 0.5rem;
+  overflow-y: auto;
+}
+
+.kanban-column-content > * + * {
+  margin-top: 0.5rem;
+}
+
+/* Quando a página de Kanban estiver ativa, tente esconder o sidebar */
+@media (min-width: 768px) {
+  .kanban-active .md\:w-64 {
+    width: 0 !important;
+    overflow: hidden;
+  }
+
+  .kanban-active .md\:flex {
+    display: none !important;
+  }
+}
+
+/* Estilos personalizados para scrollbars */
+@layer utilities {
+  /* Scrollbar fina */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  /* Trilha da scrollbar */
+  .scrollbar-track-transparent::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  /* Thumb da scrollbar */
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+  
+  .scrollbar-thumb-gray-200::-webkit-scrollbar-thumb {
+    background: #e5e7eb;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thumb-gray-200::-webkit-scrollbar-thumb:hover {
+    background: #d1d5db;
+  }
+}
+

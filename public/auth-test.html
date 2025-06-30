@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teste de Autenticação</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      background-color: #f9f9f9;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    input {
+      padding: 8px;
+      margin-bottom: 10px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    pre {
+      background-color: #f1f1f1;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .loading {
+      display: none;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Teste de Autenticação com Supabase</h1>
+  <p>Este teste verifica se os endpoints de autenticação estão funcionando corretamente com o Supabase.</p>
+  
+  <div class="card">
+    <h2>1. Testar Endpoint Básico</h2>
+    <p>Verifica se os endpoints da API estão retornando JSON corretamente.</p>
+    <button onclick="testBasicEndpoint()">Testar API Básica</button>
+    <span id="basicLoading" class="loading">Carregando...</span>
+    <div>Resultado: <pre id="basicResult">Clique no botão para testar</pre></div>
+  </div>
+  
+  <div class="card">
+    <h2>2. Registrar Novo Usuário</h2>
+    <div>
+      <input type="text" id="regName" placeholder="Nome" value="Usuário Teste">
+      <input type="email" id="regEmail" placeholder="Email" value="teste@exemplo.com">
+      <input type="password" id="regPassword" placeholder="Senha" value="Senha123!">
+    </div>
+    <button onclick="testRegister()">Registrar</button>
+    <span id="registerLoading" class="loading">Carregando...</span>
+    <div>Resultado: <pre id="registerResult">Preencha os campos e clique no botão</pre></div>
+  </div>
+  
+  <div class="card">
+    <h2>3. Login</h2>
+    <div>
+      <input type="email" id="loginEmail" placeholder="Email" value="teste@exemplo.com">
+      <input type="password" id="loginPassword" placeholder="Senha" value="Senha123!">
+    </div>
+    <button onclick="testLogin()">Login</button>
+    <span id="loginLoading" class="loading">Carregando...</span>
+    <div>Resultado: <pre id="loginResult">Preencha os campos e clique no botão</pre></div>
+  </div>
+  
+  <div class="card">
+    <h2>4. Verificar Autenticação</h2>
+    <button onclick="testVerify()">Verificar</button>
+    <span id="verifyLoading" class="loading">Carregando...</span>
+    <div>Resultado: <pre id="verifyResult">Clique no botão para testar</pre></div>
+  </div>
+  
+  <div class="card">
+    <h2>5. Logout</h2>
+    <button onclick="testLogout()">Logout</button>
+    <span id="logoutLoading" class="loading">Carregando...</span>
+    <div>Resultado: <pre id="logoutResult">Clique no botão para testar</pre></div>
+  </div>
+  
+  <script>
+    const BASE_URL = 'http://localhost:3001';
+    
+    async function makeRequest(url, method = 'GET', body = null, elementId) {
+      const loadingEl = document.getElementById(elementId + 'Loading');
+      const resultEl = document.getElementById(elementId + 'Result');
+      
+      try {
+        loadingEl.style.display = 'inline';
+        resultEl.textContent = 'Fazendo requisição...';
+        
+        const options = {
+          method,
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        };
+        
+        if (body) {
+          options.body = JSON.stringify(body);
+        }
+        
+        console.log(`Fazendo requisição ${method} para ${url}`);
+        const response = await fetch(url, options);
+        console.log(`Status da resposta: ${response.status}`);
+        
+        const text = await response.text();
+        console.log(`Resposta (texto): ${text}`);
+        
+        let data;
+        try {
+          data = JSON.parse(text);
+          console.log('Resposta (JSON):', data);
+          resultEl.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          console.error('Erro ao parsear JSON:', e);
+          resultEl.textContent = `Erro ao parsear JSON. Resposta bruta:\n${text}`;
+        }
+        
+        return { response, data };
+      } catch (error) {
+        console.error('Erro na requisição:', error);
+        resultEl.textContent = `Erro: ${error.message}`;
+        return { error };
+      } finally {
+        loadingEl.style.display = 'none';
+      }
+    }
+    
+    async function testBasicEndpoint() {
+      return makeRequest(`${BASE_URL}/api/test`, 'GET', null, 'basic');
+    }
+    
+    async function testRegister() {
+      const name = document.getElementById('regName').value;
+      const email = document.getElementById('regEmail').value;
+      const password = document.getElementById('regPassword').value;
+      
+      if (!name || !email || !password) {
+        document.getElementById('registerResult').textContent = 'Preencha todos os campos!';
+        return;
+      }
+      
+      // Adicionar timestamp ao email para evitar duplicatas
+      const timestampedEmail = email.includes('@') 
+        ? `${email.split('@')[0]}+${Date.now()}@${email.split('@')[1]}`
+        : email;
+      
+      document.getElementById('regEmail').value = timestampedEmail;
+      
+      return makeRequest(`${BASE_URL}/api/auth/register`, 'POST', {
+        name,
+        email: timestampedEmail,
+        password
+      }, 'register');
+    }
+    
+    async function testLogin() {
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      
+      if (!email || !password) {
+        document.getElementById('loginResult').textContent = 'Preencha todos os campos!';
+        return;
+      }
+      
+      return makeRequest(`${BASE_URL}/api/auth/login`, 'POST', {
+        email,
+        password
+      }, 'login');
+    }
+    
+    async function testVerify() {
+      return makeRequest(`${BASE_URL}/api/auth/verify`, 'GET', null, 'verify');
+    }
+    
+    async function testLogout() {
+      return makeRequest(`${BASE_URL}/api/auth/logout`, 'POST', null, 'logout');
+    }
+  </script>
+</body>
+</html>

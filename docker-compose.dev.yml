@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # Next.js Application for Development
+  app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=mysql://root:123456789@host.docker.internal:3306/crmone-teste
+      - NEXTAUTH_SECRET=dev-secret-key
+      - NEXTAUTH_URL=http://localhost:3000
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+
+    networks:
+      - app-network
+    restart: unless-stopped
+    command: npm run dev
+
+  # MySQL Database
+volumes: {}
+
+networks:
+  app-network:
+    driver: bridge

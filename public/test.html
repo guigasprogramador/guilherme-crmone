@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teste API</title>
+  <script>
+    async function testGet() {
+      try {
+        const response = await fetch('http://localhost:3001/api/test');
+        const text = await response.text();
+        console.log('Resposta GET (texto):', text);
+        document.getElementById('getResult').textContent = text;
+        
+        try {
+          const json = JSON.parse(text);
+          console.log('Resposta GET (JSON):', json);
+        } catch (e) {
+          console.error('Erro ao parsear JSON:', e);
+        }
+      } catch (error) {
+        console.error('Erro na requisição GET:', error);
+        document.getElementById('getResult').textContent = 'Erro: ' + error.message;
+      }
+    }
+
+    async function testPost() {
+      try {
+        const response = await fetch('http://localhost:3001/api/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const text = await response.text();
+        console.log('Resposta POST (texto):', text);
+        document.getElementById('postResult').textContent = text;
+        
+        try {
+          const json = JSON.parse(text);
+          console.log('Resposta POST (JSON):', json);
+        } catch (e) {
+          console.error('Erro ao parsear JSON:', e);
+        }
+      } catch (error) {
+        console.error('Erro na requisição POST:', error);
+        document.getElementById('postResult').textContent = 'Erro: ' + error.message;
+      }
+    }
+
+    async function testRegister() {
+      try {
+        const testUser = {
+          name: "Usuário Teste",
+          email: "teste" + Date.now() + "@teste.com",
+          password: "Senha123!"
+        };
+        
+        console.log("Enviando dados:", testUser);
+        
+        const response = await fetch('http://localhost:3001/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(testUser),
+          credentials: 'include'
+        });
+        
+        console.log("Status:", response.status);
+        const text = await response.text();
+        console.log('Resposta registro (texto):', text);
+        document.getElementById('registerResult').textContent = text;
+        
+        try {
+          const json = JSON.parse(text);
+          console.log('Resposta registro (JSON):', json);
+        } catch (e) {
+          console.error('Erro ao parsear JSON:', e);
+        }
+      } catch (error) {
+        console.error('Erro na requisição de registro:', error);
+        document.getElementById('registerResult').textContent = 'Erro: ' + error.message;
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>Teste de API</h1>
+  <button onclick="testGet()">Testar GET</button>
+  <div>Resultado GET: <pre id="getResult"></pre></div>
+  <hr>
+  <button onclick="testPost()">Testar POST (Supabase)</button>
+  <div>Resultado POST: <pre id="postResult"></pre></div>
+  <hr>
+  <button onclick="testRegister()">Testar Registro de Usuário</button>
+  <div>Resultado Registro: <pre id="registerResult"></pre></div>
+</body>
+</html>
