@@ -160,14 +160,56 @@ function parseDateString(dateString: string | undefined | null): string | null {
   return null;
 }
 
+// Função auxiliar para converter valores monetários
+function parseValorMonetario(valor: string | number): number {
+  if (typeof valor === 'number') return valor;
+  if (!valor || typeof valor !== 'string') return 0;
+  
+  // Remove espaços e converte para string
+  const valorLimpo = valor.toString().trim();
+  
+  // Remove símbolos de moeda e espaços
+  let valorSemSimbolo = valorLimpo.replace(/[R$\s]/g, '');
+  
+  // Se não há vírgula nem ponto, é um número inteiro
+  if (!valorSemSimbolo.includes(',') && !valorSemSimbolo.includes('.')) {
+    const num = parseInt(valorSemSimbolo) || 0;
+    return num;
+  }
+  
+  // Se há vírgula, assumimos formato brasileiro (vírgula = decimal)
+  if (valorSemSimbolo.includes(',')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorSemSimbolo = valorSemSimbolo.replace(/\./g, '').replace(',', '.');
+  }
+  // Se há apenas ponto, pode ser separador decimal ou de milhares
+  else if (valorSemSimbolo.includes('.')) {
+    // Se há mais de um ponto, o último é decimal
+    const pontos = valorSemSimbolo.split('.');
+    if (pontos.length > 2) {
+      // Múltiplos pontos: os primeiros são separadores de milhares
+      const parteInteira = pontos.slice(0, -1).join('');
+      const parteDecimal = pontos[pontos.length - 1];
+      valorSemSimbolo = parteInteira + '.' + parteDecimal;
+    }
+    // Se há apenas um ponto e a parte depois tem 3 dígitos, é separador de milhares
+    else if (pontos[1] && pontos[1].length === 3 && /^\d+$/.test(pontos[1])) {
+      valorSemSimbolo = valorSemSimbolo.replace('.', '');
+    }
+    // Caso contrário, é separador decimal
+  }
+  
+  const resultado = parseFloat(valorSemSimbolo) || 0;
+  return resultado;
+}
+
 // Helper para converter valor monetário "R$ X.XXX,XX" para DECIMAL
 function parseCurrency(currencyValue: string | number | undefined | null): number | null {
   if (currencyValue === undefined || currencyValue === null || currencyValue === 'A definir') return null;
   if (typeof currencyValue === 'number') return currencyValue;
   if (typeof currencyValue === 'string') {
-    const cleaned = currencyValue.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-    const value = parseFloat(cleaned);
-    return isNaN(value) ? null : value;
+    const value = parseValorMonetario(currencyValue);
+    return value;
   }
   return null;
 }
@@ -285,6 +327,41 @@ export async function POST(request: NextRequest) {
         oportunidadeDB.data_reuniao, oportunidadeDB.hora_reuniao, oportunidadeDB.probabilidade, oportunidadeDB.posicao_kanban, oportunidadeDB.motivo_perda // Added motivo_perda
       ]
     );
+
+    // Lidar com documentos do repositório (vinculação)
+    if (data.documentos_vinculados && Array.isArray(data.documentos_vinculados) && data.documentos_vinculados.length > 0) {
+      console.log('Vinculando documentos à oportunidade:', newOpportunityId, 'Documentos:', data.documentos_vinculados);
+      
+      for (const documentoId of data.documentos_vinculados) {
+        try {
+          // Verificar se o documento existe antes de tentar vincular
+          const [docExists]: any = await connection.execute(
+            'SELECT id FROM documentos WHERE id = ?',
+            [documentoId]
+          );
+          
+          if (docExists.length === 0) {
+            console.warn(`Documento ${documentoId} não encontrado, pulando vinculação`);
+            continue;
+          }
+          
+          // Atualizar o documento existente para vincular à oportunidade
+          const [updateResult]: any = await connection.execute(
+            'UPDATE documentos SET oportunidade_id = ?, data_atualizacao = NOW() WHERE id = ?',
+            [newOpportunityId, documentoId]
+          );
+          
+          if (updateResult.affectedRows > 0) {
+            console.log('Documento vinculado com sucesso:', documentoId, 'à oportunidade:', newOpportunityId);
+          } else {
+            console.warn('Nenhuma linha afetada ao vincular documento:', documentoId);
+          }
+        } catch (docError: any) {
+          console.error('Erro ao vincular documento:', documentoId, 'Erro:', docError.message);
+          // Continua com os outros documentos mesmo se um falhar
+        }
+      }
+    }
 
     await connection.commit();
     console.log("Transação MySQL commitada. Oportunidade criada com ID:", newOpportunityId);

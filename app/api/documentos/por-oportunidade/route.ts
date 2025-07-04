@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const oportunidadeId = searchParams.get('oportunidadeId');
 
+    console.log('🔍 API Documentos - Recebida requisição para oportunidade:', oportunidadeId);
+
     if (!oportunidadeId) {
+      console.log('❌ API Documentos - ID da oportunidade não fornecido');
       return NextResponse.json(
         { error: 'ID da oportunidade é obrigatório' },
         { status: 400 }
@@ -34,6 +37,7 @@ export async function GET(request: NextRequest) {
     }
 
     connection = await getDbConnection();
+    console.log('✅ API Documentos - Conexão com banco estabelecida');
 
     const query = `
       SELECT
@@ -52,17 +56,22 @@ export async function GET(request: NextRequest) {
     const [rows] = await connection.execute(query, [oportunidadeId]);
 
     const documentos = rows as any[];
+    console.log('📊 API Documentos - Encontrados', documentos.length, 'documentos no banco');
 
-    const documentosFormatados = documentos.map((doc: any) => ({
-      id: doc.id,
-      nome: doc.nome,
-      url_documento: doc.url_documento,
-      formato: doc.formato,
-      data_criacao: doc.data_criacao ? new Date(doc.data_criacao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A',
-      tamanho: formatarTamanho(doc.tamanho),
-      tipo: doc.tipo || doc.categoria || 'Documento',
-    }));
+    const documentosFormatados = documentos.map((doc: any) => {
+      console.log('📄 Processando documento:', doc.nome, 'URL:', doc.url_documento);
+      return {
+        id: doc.id,
+        nome: doc.nome,
+        url_documento: doc.url_documento,
+        formato: doc.formato,
+        data_criacao: doc.data_criacao ? new Date(doc.data_criacao).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A',
+        tamanho: formatarTamanho(doc.tamanho),
+        tipo: doc.tipo || doc.categoria || 'Documento',
+      };
+    });
 
+    console.log('✅ API Documentos - Retornando', documentosFormatados.length, 'documentos formatados');
     return NextResponse.json(documentosFormatados);
 
   } catch (error: any) {
@@ -73,7 +82,7 @@ export async function GET(request: NextRequest) {
     );
   } finally {
     if (connection) {
-      await connection.end();
+      await connection.release();
     }
   }
 }

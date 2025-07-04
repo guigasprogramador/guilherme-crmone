@@ -3,6 +3,41 @@ import { Licitacao, LicitacaoStatus, LicitacaoFiltros, LicitacaoEstatisticas, Do
 import { getDbConnection, Connection } from '@/lib/mysql/client';
 import { v4 as uuidv4 } from 'uuid';
 
+// Helper para converter valores monetários corretamente
+function parseValorMonetario(valor: string | number | null | undefined): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  
+  // Se já é um número, retorna diretamente
+  if (typeof valor === 'number') return valor;
+  
+  // Converte para string e remove espaços
+  let valorStr = String(valor).trim();
+  
+  // Remove símbolos de moeda (R$, $, etc.)
+  valorStr = valorStr.replace(/[R$\s]/g, '');
+  
+  // Se contém vírgula e ponto, assume formato brasileiro (ex: 1.234.567,89)
+  if (valorStr.includes(',') && valorStr.includes('.')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorStr = valorStr.replace(/\./g, '').replace(',', '.');
+  }
+  // Se contém apenas vírgula, assume que é separador decimal brasileiro
+  else if (valorStr.includes(',') && !valorStr.includes('.')) {
+    valorStr = valorStr.replace(',', '.');
+  }
+  // Se contém apenas ponto, verifica se é separador decimal ou de milhares
+  else if (valorStr.includes('.')) {
+    // Se há mais de um ponto ou o último ponto não tem exatamente 2 dígitos após, assume separador de milhares
+    const pontos = valorStr.split('.');
+    if (pontos.length > 2 || (pontos.length === 2 && pontos[1].length !== 2)) {
+      valorStr = valorStr.replace(/\./g, '');
+    }
+  }
+  
+  const resultado = parseFloat(valorStr);
+  return isNaN(resultado) ? null : resultado;
+}
+
 // Helper para converter string DD/MM/YYYY ou ISO para YYYY-MM-DD
 function parseToYYYYMMDD(dateString: string | undefined | null): string | null {
   if (!dateString) return null;
@@ -38,8 +73,11 @@ function formatarLicitacaoMySQL(
   
   // Formatar valor para string monetária BRL
   let valorEstimadoFormatado = 'R$ 0,00';
-  if (item.valor_estimado !== null && item.valor_estimado !== undefined) {
-    valorEstimadoFormatado = `R$ ${Number(item.valor_estimado).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (item.valor_estimado !== null && item.valor_estimado !== undefined && item.valor_estimado !== '') {
+    const valorNumerico = Number(item.valor_estimado);
+    if (!isNaN(valorNumerico)) {
+      valorEstimadoFormatado = `R$ ${valorNumerico.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
   }
   
   // Formatar datas para DD/MM/YYYY, se existirem
@@ -66,7 +104,7 @@ function formatarLicitacaoMySQL(
     objeto: item.objeto,
     edital: item.edital,
     numeroEdital: item.numero_edital,
-    responsavel: responsavelPrincipalNome || item.responsavel_principal_nome || '', // da junção na query principal
+    responsavel: responsavelPrincipalNome || item.responsavel_principal_nome || 'N/D', // da junção na query principal
     responsavelId: item.responsavel_id,
     responsaveis: responsaveisMultiplos.map(r => ({ id: r.id, nome: r.nome, papel: r.papel || 'N/A' })), // Mapeia para o formato esperado
     prazo: item.prazo, // Este campo parece ser uma string descritiva, não uma data
@@ -354,7 +392,7 @@ export async function POST(request: NextRequest) {
       data_limite_proposta: parseToYYYYMMDD(licitacaoData.dataLimiteProposta),
       data_julgamento: parseToYYYYMMDD(licitacaoData.dataJulgamento),
       orgao_id: licitacaoData.orgaoId,
-      valor_estimado: licitacaoData.valorEstimado ? parseFloat(String(licitacaoData.valorEstimado).replace(/[^0-9,.-]+/g,"").replace(".","").replace(",",".")) : null,
+      valor_estimado: licitacaoData.valorEstimado ? parseValorMonetario(licitacaoData.valorEstimado) : null,
       responsavel_id: licitacaoData.responsavelId || null, // FK para users
       prazo: licitacaoData.prazo || null,
       url_licitacao: licitacaoData.urlLicitacao || null,

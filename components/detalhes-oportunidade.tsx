@@ -46,6 +46,50 @@ import { useNotas, Nota } from "@/hooks/comercial/use-notas";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { useOportunidadeItens, OportunidadeItem } from "@/hooks/comercial/use-oportunidade-itens";
+import { VisualizadorDocumentos } from "@/components/documentos/visualizador-documentos";
+
+// Função auxiliar para converter valores monetários
+function parseValorMonetario(valor: string | number): number {
+  if (typeof valor === 'number') return valor;
+  if (!valor || typeof valor !== 'string') return 0;
+  
+  // Remove espaços e converte para string
+  const valorLimpo = valor.toString().trim();
+  
+  // Remove símbolos de moeda e espaços
+  let valorSemSimbolo = valorLimpo.replace(/[R$\s]/g, '');
+  
+  // Se não há vírgula nem ponto, é um número inteiro
+  if (!valorSemSimbolo.includes(',') && !valorSemSimbolo.includes('.')) {
+    const num = parseInt(valorSemSimbolo) || 0;
+    return num;
+  }
+  
+  // Se há vírgula, assumimos formato brasileiro (vírgula = decimal)
+  if (valorSemSimbolo.includes(',')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorSemSimbolo = valorSemSimbolo.replace(/\./g, '').replace(',', '.');
+  }
+  // Se há apenas ponto, pode ser separador decimal ou de milhares
+  else if (valorSemSimbolo.includes('.')) {
+    // Se há mais de um ponto, o último é decimal
+    const pontos = valorSemSimbolo.split('.');
+    if (pontos.length > 2) {
+      // Múltiplos pontos: os primeiros são separadores de milhares
+      const parteInteira = pontos.slice(0, -1).join('');
+      const parteDecimal = pontos[pontos.length - 1];
+      valorSemSimbolo = parteInteira + '.' + parteDecimal;
+    }
+    // Se há apenas um ponto e a parte depois tem 3 dígitos, é separador de milhares
+    else if (pontos[1] && pontos[1].length === 3 && /^\d+$/.test(pontos[1])) {
+      valorSemSimbolo = valorSemSimbolo.replace('.', '');
+    }
+    // Caso contrário, é separador decimal
+  }
+  
+  const resultado = parseFloat(valorSemSimbolo) || 0;
+  return resultado;
+}
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
@@ -119,6 +163,7 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
 
   const [documentosOportunidade, setDocumentosOportunidade] = useState<any[]>([])
   const [isLoadingDocumentos, setIsLoadingDocumentos] = useState(false)
+  const [documentosCarregados, setDocumentosCarregados] = useState(false)
   const [showAgendarReuniaoModal, setShowAgendarReuniaoModal] = useState(false);
   const [isAddingNota, setIsAddingNota] = useState(false);
 
@@ -167,34 +212,45 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
           "Implementação de solução tecnológica para atender às necessidades específicas do cliente, incluindo módulos de gestão, relatórios e integrações com sistemas existentes.",
       });
       setDocumentosOportunidade([]);
-      // Outros resets de estado relacionados a abas podem ser feitos aqui se necessário
-      // Por exemplo, se as notas ou itens não devem persistir visualmente ao trocar de oportunidade
-      if (activeTab === "notas" && oportunidade?.id) fetchNotas(oportunidade.id);
-      if (activeTab === "servicos" && oportunidade?.id && typeof fetchItensDaOportunidade === 'function') fetchItensDaOportunidade(oportunidade.id); // Re-fetch itens usando referência do hook
+      setDocumentosCarregados(false);
     }
-  }, [oportunidade, activeTab]); // Adicionado activeTab para re-fetch quando a aba é acessada
+  }, [oportunidade]); // Removido activeTab para evitar re-renders desnecessários
+
+  // useEffect separado para carregar dados específicos da aba
+  useEffect(() => {
+    if (oportunidade?.id) {
+      if (activeTab === "notas") fetchNotas(oportunidade.id);
+      if (activeTab === "servicos" && typeof fetchItensDaOportunidade === 'function') fetchItensDaOportunidade(oportunidade.id);
+    }
+  }, [activeTab, oportunidade?.id]); // Separado para controlar melhor as dependências
 
   useEffect(() => {
-    if (oportunidade?.id && activeTab === "documentos" && documentosOportunidade.length === 0) {
+    if (oportunidade?.id && activeTab === "documentos" && !documentosCarregados) {
+      console.log('🔍 Iniciando carregamento de documentos para oportunidade:', oportunidade.id);
       const fetchDocumentos = async () => {
         setIsLoadingDocumentos(true);
         try {
+          console.log('📡 Fazendo requisição para API de documentos...');
           const response = await fetch(`/api/documentos/por-oportunidade?oportunidadeId=${oportunidade.id}`);
+          console.log('📡 Resposta da API:', response.status, response.statusText);
           if (!response.ok) {
             throw new Error('Falha ao buscar documentos da oportunidade');
           }
           const data = await response.json();
+          console.log('📄 Documentos recebidos:', data.length, 'documentos');
           setDocumentosOportunidade(data);
         } catch (error) {
-          console.error("Erro ao buscar documentos:", error);
+          console.error("❌ Erro ao buscar documentos:", error);
           setDocumentosOportunidade([]);
         } finally {
           setIsLoadingDocumentos(false);
+          setDocumentosCarregados(true);
+          console.log('✅ Carregamento de documentos finalizado');
         }
       };
       fetchDocumentos();
     }
-  }, [oportunidade?.id, activeTab, documentosOportunidade.length]);
+  }, [oportunidade?.id, activeTab]); // Removido documentosCarregados das dependências
 
   const adicionarNota = async () => {
     if (!novaNota.trim() || !oportunidade?.id || !user?.id) {
@@ -293,9 +349,46 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
-    console.log("Salvando dados:", formData);
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!oportunidade?.id) return;
+    
+    try {
+      const response = await fetch(`/api/comercial/oportunidades/${oportunidade.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+           titulo: formData.titulo,
+           valor: parseValorMonetario(formData.valor || '0'),
+           status: formData.status,
+           descricao: formData.descricao,
+           responsavel: formData.responsavel,
+         }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Falha ao atualizar oportunidade');
+      }
+      
+      toast({ 
+        title: "Sucesso", 
+        description: "Oportunidade atualizada com sucesso." 
+      });
+      
+      setIsEditing(false);
+      
+      // Atualiza a lista de oportunidades
+      if (onOportunidadeNeedsRefresh) {
+        onOportunidadeNeedsRefresh();
+      }
+    } catch (error) {
+      toast({ 
+        title: "Erro", 
+        description: `Falha ao atualizar oportunidade: ${error instanceof Error ? error.message : "Erro desconhecido"}`, 
+        variant: "destructive" 
+      });
+    }
   };
 
   const atualizarStatus = (novoStatus: string) => {
@@ -364,6 +457,23 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
                 {/* ... Conteúdo da aba Resumo ... (sem alterações diretas nesta etapa, mas o campo formData.valor deve ser atualizado) */}
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Valor da Oportunidade</h3>
+                    {isEditing ? (
+                      <div className="mt-1">
+                        <Input 
+                          value={formData.valor} 
+                          onChange={(e) => handleFieldChange("valor", e.target.value)} 
+                          placeholder="Ex: R$ 50.000,00"
+                          className="mt-1"
+                        />
+                      </div>
+                    ) : (
+                      <p className="mt-1 font-medium">
+                        {parseFloat(formData.valor || "0").toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </p>
+                    )}
+                  </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Descrição da Demanda</h3>
                     {isEditing ? (
@@ -525,9 +635,13 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
               </div>
             )}
             {activeTab === "documentos" && (
-              <div className="space-y-4">
-                <Card><CardHeader><CardTitle>Documentos da Oportunidade</CardTitle></CardHeader><CardContent>{isLoadingDocumentos ? (<div className="flex items-center justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /><p className="ml-2 text-muted-foreground">Carregando documentos...</p></div>) : documentosOportunidade.length > 0 ? (<ul className="space-y-3">{documentosOportunidade.map((doc) => (<li key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100"><div className="flex items-center space-x-3"><FileTextIcon className="h-5 w-5 text-blue-500" /><div><a href={doc.url_documento} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline hover:text-blue-800" title={doc.nome}>{doc.nome.length > 40 ? `${doc.nome.substring(0, 37)}...` : doc.nome}</a><p className="text-xs text-muted-foreground">{doc.tipo} - {doc.formato?.toUpperCase()} - {doc.tamanho}</p></div></div><div className="text-xs text-muted-foreground">Upload: {doc.data_criacao}</div></li>))}</ul>) : (<div className="text-center py-6"><FileTextIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" /><p className="text-muted-foreground">Nenhum documento associado.</p></div>)}</CardContent></Card>
-              </div>
+              <VisualizadorDocumentos
+                entityId={oportunidade?.id || ''}
+                entityType="oportunidade"
+                title="Documentos da Oportunidade"
+                showFilters={true}
+                allowUpload={false}
+              />
             )}
           </Tabs>
         </SheetContent>

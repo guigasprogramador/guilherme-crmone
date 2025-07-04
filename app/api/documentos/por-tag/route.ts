@@ -53,6 +53,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    if (connection) await connection.end();
+    if (connection) await connection.release();
   }
 }

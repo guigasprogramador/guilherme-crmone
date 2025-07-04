@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ResumoLicitacao } from "./resumo-licitacao"
 import { ServicosLicitacao } from "./servicos-licitacao"
+import { VisualizadorDocumentos } from "@/components/documentos/visualizador-documentos"
 import { Licitacao, OrgaoDetalhado as OrgaoType } from "@/hooks/useLicitacoesOtimizado";
 import { useLicitacaoEtapas, LicitacaoEtapa, LicitacaoEtapaPayload } from "@/hooks/comercial/useLicitacaoEtapas" // Ajuste o caminho se necessário
 import { format, parse, isValid } from "date-fns";
@@ -135,7 +136,7 @@ const flowSteps = [
   { id: "impugnada", label: "Impugnada" },
 ];
 
-type LicitacaoWithHomologado = Licitacao & { valorHomologado?: number };
+type LicitacaoWithValores = Licitacao & { valorProposta?: number; valorHomologado?: number };
 
 export function DetalhesLicitacao({
   licitacao,
@@ -202,10 +203,21 @@ export function DetalhesLicitacao({
 
   useEffect(() => {
     if (licitacao) {
+      // Tratar valorEstimado como número para o formulário
+      let valorEstimadoNumerico = null;
+      if (licitacao._valorEstimadoNumerico !== undefined) {
+        valorEstimadoNumerico = licitacao._valorEstimadoNumerico;
+      } else if (licitacao.valorEstimado) {
+        // Se valorEstimado for uma string formatada, converter para número
+        const valorLimpo = String(licitacao.valorEstimado).replace(/[^0-9,.-]+/g, '').replace('.', '').replace(',', '.');
+        valorEstimadoNumerico = valorLimpo ? parseFloat(valorLimpo) : null;
+      }
+      
       setFormData({
         ...licitacao,
-        valorEstimado: licitacao._valorEstimadoNumerico !== undefined ? licitacao._valorEstimadoNumerico.toString() : licitacao.valorEstimado,
+        valorEstimado: valorEstimadoNumerico,
         orgao: typeof licitacao.orgao === 'object' ? licitacao.orgao?.nome : licitacao.orgao,
+        orgaoId: licitacao.orgaoId || (typeof licitacao.orgao === 'object' ? licitacao.orgao?.id : null),
         responsaveis: licitacao.responsaveis || [],
       });
     }
@@ -371,10 +383,20 @@ export function DetalhesLicitacao({
     }
   };
   const handleFieldChange = (field: keyof Licitacao, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
+    // Tratamento especial para campos numéricos
+    if (field === 'valorEstimado' || field === 'valorProposta' || field === 'valorHomologado') {
+      // Converter string para número, removendo formatação se necessário
+      const numericValue = value === '' || value === null || value === undefined ? null : parseFloat(String(value).replace(/[^0-9,.-]+/g, '').replace('.', '').replace(',', '.'));
+      setFormData(prev => ({
+        ...prev,
+        [field]: numericValue
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
   };
   const handleSave = async () => {
     try {
@@ -391,7 +413,7 @@ export function DetalhesLicitacao({
         credentials: 'include',
         body: JSON.stringify(formData),
       });
-
+      
       if (response.ok) {
         const updatedLicitacao = await response.json();
         toast.success('Licitação atualizada com sucesso');
@@ -513,8 +535,29 @@ export function DetalhesLicitacao({
 
   if (!licitacao) return null;
 
+  const parseValorMonetario = (valor: string | number | null | undefined): number | null => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    if (typeof valor === 'number') return valor;
+    
+    let valorStr = String(valor).trim().replace(/[R$\s]/g, '');
+    
+    if (valorStr.includes(',') && valorStr.includes('.')) {
+      valorStr = valorStr.replace(/\./g, '').replace(',', '.');
+    } else if (valorStr.includes(',') && !valorStr.includes('.')) {
+      valorStr = valorStr.replace(',', '.');
+    } else if (valorStr.includes('.')) {
+      const pontos = valorStr.split('.');
+      if (pontos.length > 2 || (pontos.length === 2 && pontos[1].length !== 2)) {
+        valorStr = valorStr.replace(/\./g, '');
+      }
+    }
+    
+    const resultado = parseFloat(valorStr);
+    return isNaN(resultado) ? null : resultado;
+  };
+
   const valorExibicao = formData.valorEstimado
-    ? (typeof formData.valorEstimado === 'number' ? formData.valorEstimado : parseFloat(String(formData.valorEstimado).replace(/\./g, '').replace(',', '.'))).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+    ? (parseValorMonetario(formData.valorEstimado) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     : "N/A";
 
   return (
@@ -632,51 +675,16 @@ export function DetalhesLicitacao({
             </TabsContent>
 
             <TabsContent value="documentos">
-  <div className="flex justify-between items-center mb-3">
-    <h3 className="text-lg font-semibold">Documentos da Licitação</h3>
-    {isEditing && (
-      <Button size="sm" onClick={() => setUploadDialogOpen(true)}>
-        <Upload className="w-4 h-4 mr-2" /> Adicionar Documento
-      </Button>
-    )}
-  </div>
-  {carregandoDocumentos ? (
-    <div className="flex justify-center items-center py-8">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <span className="ml-2 text-muted-foreground">Carregando documentos...</span>
-    </div>
-  ) : documentosLicitacao.length === 0 ? (
-    <div className="text-center py-6 text-gray-500">
-      <FileText className="h-12 w-12 mx-auto mb-3 text-gray-400" />
-      Nenhum documento enviado para esta licitação.
-    </div>
-  ) : (
-    <div className="space-y-3">
-      {documentosLicitacao.map((doc) => (
-        <Card key={doc.id} className="flex flex-col md:flex-row md:items-center md:justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-blue-500" />
-            <div>
-              <div className="font-medium text-sm">{doc.nome}</div>
-              <div className="text-xs text-muted-foreground">{doc.tipo}</div>
-              {doc.tamanho && <div className="text-xs text-muted-foreground">{formatFileSize(doc.tamanho)}</div>}
-            </div>
-          </div>
-          <div className="flex gap-2 mt-2 md:mt-0">
-            <Button variant="ghost" size="icon" onClick={() => baixarDocumento(doc.url, doc.nome)} title="Baixar">
-              <Download className="w-4 h-4" />
-            </Button>
-            {isEditing && (
-              <Button variant="destructive" size="icon" onClick={() => handleDeleteDocumentoClick(doc)} title="Excluir">
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-        </Card>
-      ))}
-    </div>
-  )}
-</TabsContent>
+              <VisualizadorDocumentos
+                entityId={licitacao?.id || ''}
+                entityType="licitacao"
+                title="Documentos da Licitação"
+                showFilters={true}
+                allowUpload={isEditing}
+                onDocumentUpload={() => setUploadDialogOpen(true)}
+              />
+            </TabsContent>
+
             <TabsContent value="valores">
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
     <div>
@@ -705,22 +713,23 @@ export function DetalhesLicitacao({
         />
       </div>
     )}
+
     {typeof formData.valorHomologado !== 'undefined' && (
-      <div>
-        <Label htmlFor="valorHomologado">Valor Homologado</Label>
-        <Input
-          id="valorHomologado"
-          type="number"
-          value={formData.valorHomologado ?? ''}
-          onChange={e => handleFieldChange('valorHomologado', e.target.value) as any}
-          disabled={!isEditing}
-          min={0}
-          step={0.01}
-        />
-      </div>
-    )}
-    {/* Adicione outros campos de valores relevantes conforme necessário */}
-  </div>
+        <div className="space-y-2">
+          <Label htmlFor="valorHomologado">Valor Homologado</Label>
+          <Input
+            id="valorHomologado"
+            type="number"
+            value={formData.valorHomologado ?? ''}
+            onChange={e => handleFieldChange('valorHomologado', e.target.value) as any}
+            disabled={!isEditing}
+            min={0}
+            step={0.01}
+          />
+        </div>
+      )}
+      {/* Adicione outros campos de valores relevantes conforme necessário */}
+    </div>
   <div className="flex justify-end mt-6">
     {isEditing && (
       <Button onClick={handleSave} className="gap-2">

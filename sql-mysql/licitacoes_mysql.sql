@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS licitacoes (
   data_julgamento TIMESTAMP NULL,
   valor_estimado DECIMAL(15, 2),
   valor_proposta DECIMAL(15, 2),
+  valor_homologado DECIMAL(15, 2),
   modalidade VARCHAR(100) NOT NULL,
   numero_processo VARCHAR(100) NULL,
   objeto TEXT,

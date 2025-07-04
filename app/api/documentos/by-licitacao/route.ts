@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     );
   } finally {
     if (connection) {
-      await connection.end();
+      await connection.release();
       console.log('[DEBUG] Conexão com MySQL fechada.');
     }
   }

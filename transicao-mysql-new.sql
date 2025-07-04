@@ -650,6 +650,7 @@ CREATE TABLE IF NOT EXISTS documentos (
   categoria TEXT NULL, -- Legacy single category field, kept for compatibility
   descricao TEXT,
   licitacao_id CHAR(36), -- FK to licitacoes table
+  oportunidade_id CHAR(36), -- FK to oportunidades table
   numero_documento TEXT,
   data_validade TIMESTAMP NULL, -- Nullable, as not all documents might have an expiry date
   url_documento TEXT, -- URL if stored externally
@@ -661,11 +662,13 @@ CREATE TABLE IF NOT EXISTS documentos (
   data_criacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   data_atualizacao TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (licitacao_id) REFERENCES licitacoes(id) ON DELETE SET NULL, -- Assuming licitacoes table exists
+  FOREIGN KEY (oportunidade_id) REFERENCES oportunidades(id) ON DELETE SET NULL, -- Assuming oportunidades table exists
   FOREIGN KEY (criado_por) REFERENCES users(id) ON DELETE SET NULL -- Assuming users table exists
 );
 
 -- Indexes for documentos table
 CREATE INDEX idx_documentos_licitacao ON documentos(licitacao_id);
+CREATE INDEX idx_documentos_oportunidade ON documentos(oportunidade_id);
 CREATE INDEX idx_documentos_status ON documentos(status);
 CREATE INDEX idx_documentos_tipo ON documentos(tipo(255)); -- Prefix for TEXT column indexing
 CREATE INDEX idx_documentos_criado_por ON documentos(criado_por);

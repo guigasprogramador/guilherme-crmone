@@ -3,6 +3,41 @@ import { Licitacao, DocumentoDetalhado, LicitacaoStatus } from '@/types/licitaco
 import { getDbConnection } from '@/lib/mysql/client';
 import { v4 as uuidv4 } from 'uuid';
 
+// Helper para converter valores monetários corretamente
+function parseValorMonetario(valor: string | number | null | undefined): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  
+  // Se já é um número, retorna diretamente
+  if (typeof valor === 'number') return valor;
+  
+  // Converte para string e remove espaços
+  let valorStr = String(valor).trim();
+  
+  // Remove símbolos de moeda (R$, $, etc.)
+  valorStr = valorStr.replace(/[R$\s]/g, '');
+  
+  // Se contém vírgula e ponto, assume formato brasileiro (ex: 1.234.567,89)
+  if (valorStr.includes(',') && valorStr.includes('.')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorStr = valorStr.replace(/\./g, '').replace(',', '.');
+  }
+  // Se contém apenas vírgula, assume que é separador decimal brasileiro
+  else if (valorStr.includes(',') && !valorStr.includes('.')) {
+    valorStr = valorStr.replace(',', '.');
+  }
+  // Se contém apenas ponto, verifica se é separador decimal ou de milhares
+  else if (valorStr.includes('.')) {
+    // Se há mais de um ponto ou o último ponto não tem exatamente 2 dígitos após, assume separador de milhares
+    const pontos = valorStr.split('.');
+    if (pontos.length > 2 || (pontos.length === 2 && pontos[1].length !== 2)) {
+      valorStr = valorStr.replace(/\./g, '');
+    }
+  }
+  
+  const resultado = parseFloat(valorStr);
+  return isNaN(resultado) ? null : resultado;
+}
+
 // Helper para converter string DD/MM/YYYY ou ISO para YYYY-MM-DD
 function parseToYYYYMMDD(dateString: string | undefined | null): string | null {
   if (!dateString) return null;
@@ -78,6 +113,7 @@ function formatarLicitacaoMySQL(
     dataJulgamento: formatDate(item.data_julgamento),
     dataCriacao: item.data_criacao ? new Date(item.data_criacao).toISOString() : '',
     dataAtualizacao: item.data_atualizacao ? new Date(item.data_atualizacao).toISOString() : '',
+    valorProposta: item.valor_proposta !== undefined && item.valor_proposta !== null ? Number(item.valor_proposta) : undefined,
     valorHomologado: item.valor_homologado !== undefined && item.valor_homologado !== null ? Number(item.valor_homologado) : undefined,
     documentos: documentosLicitacao.map((doc: any): DocumentoDetalhado => ({
       id: doc.id,
@@ -147,9 +183,9 @@ export async function GET(
   context: { params: { id: string } }
 ) {
   let connection;
-  console.log(`GET /api/licitacoes/${await context.params.id} - Iniciando consulta com MySQL`);
   try {
     const { id } = await context.params;
+    console.log(`GET /api/licitacoes/${id} - Iniciando consulta com MySQL`);
     connection = await getDbConnection();
     
     const licitacaoCompleta = await obterLicitacaoCompletaMySQL(id, connection);
@@ -201,8 +237,9 @@ export async function PUT(
       data_limite_proposta: parseToYYYYMMDD(data.dataLimiteProposta),
       data_julgamento: parseToYYYYMMDD(data.dataJulgamento),
       orgao_id: data.orgaoId,
-      valor_estimado: data.valorEstimado ? parseFloat(String(data.valorEstimado).replace(/[^0-9,.-]+/g, '').replace('.', '').replace(',', '.')) : null,
-      valor_homologado: data.valorHomologado !== undefined ? parseFloat(String(data.valorHomologado)) : null,
+      valor_estimado: data.valorEstimado ? parseValorMonetario(data.valorEstimado) : null,
+      valor_proposta: data.valorProposta ? parseValorMonetario(data.valorProposta) : null,
+      valor_homologado: data.valorHomologado ? parseValorMonetario(data.valorHomologado) : null,
       responsavel_id: data.responsavelId || null,
       prazo: data.prazo || null,
       url_licitacao: data.urlLicitacao || null,
@@ -332,7 +369,7 @@ export async function PATCH(
     // Mapear e adicionar campos da licitação principal
     const licitacaoCampos = [
         'titulo', 'status', 'modalidade', 'numero_processo', 'objeto', 'edital', 'numero_edital',
-        'data_abertura', 'data_limite_proposta', 'data_julgamento', 'orgao_id', 'valor_estimado', 'valor_homologado',
+        'data_abertura', 'data_limite_proposta', 'data_julgamento', 'orgao_id', 'valor_estimado', 'valor_proposta', 'valor_homologado',
         'responsavel_id', 'prazo', 'url_licitacao', 'url_edital', 'descricao', 'forma_pagamento',
         'obs_financeiras', 'tipo', 'tipo_faturamento', 'margem_lucro', 'contato_nome',
         'contato_email', 'contato_telefone', 'posicao_kanban'
@@ -340,7 +377,7 @@ export async function PATCH(
     const dataMapping: Record<string, string> = { // camelCase to snake_case
         'numeroProcesso': 'numero_processo', 'dataAbertura': 'data_abertura',
         'dataLimiteProposta': 'data_limite_proposta', 'dataJulgamento': 'data_julgamento',
-        'orgaoId': 'orgao_id', 'valorEstimado': 'valor_estimado', 'valorHomologado': 'valor_homologado', 'responsavelId': 'responsavel_id',
+        'orgaoId': 'orgao_id', 'valorEstimado': 'valor_estimado', 'valorProposta': 'valor_proposta', 'valorHomologado': 'valor_homologado', 'responsavelId': 'responsavel_id',
         'urlLicitacao': 'url_licitacao', 'urlEdital': 'url_edital', 'formaPagamento': 'forma_pagamento',
         'obsFinanceiras': 'obs_financeiras', 'tipoFaturamento': 'tipo_faturamento',
         'margemLucro': 'margem_lucro', 'contatoNome': 'contato_nome', 'contatoEmail': 'contato_email',
@@ -354,8 +391,8 @@ export async function PATCH(
             let value = data[key];
             if (['dataAbertura', 'dataLimiteProposta', 'dataJulgamento'].includes(key)) {
                 value = parseToYYYYMMDD(value);
-            } else if (key === 'valorEstimado' && value !== null) {
-                value = parseFloat(String(value).replace(/[^0-9,.-]+/g,"").replace(".","").replace(",","."))
+            } else if (['valorEstimado', 'valorProposta', 'valorHomologado'].includes(key) && value !== null) {
+                value = parseValorMonetario(value)
             } else if (key === 'margemLucro' && value !== null) {
                  value = parseFloat(String(value));
             }

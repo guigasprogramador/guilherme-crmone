@@ -25,7 +25,7 @@ export async function GET(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
-  const { id: oportunidadeId } = context.params; // Aguarda params
+  const { id: oportunidadeId } = await context.params; // Aguarda params
   if (!oportunidadeId) {
     return NextResponse.json({ error: 'ID da oportunidade é obrigatório' }, { status: 400 });
   }
@@ -52,7 +52,7 @@ export async function POST(
   request: NextRequest,
   context: { params: { id: string } }
 ) {
-  const { id: oportunidadeId } = context.params; // Aguarda params
+  const { id: oportunidadeId } = await context.params; // Aguarda params
   if (!oportunidadeId) {
     return NextResponse.json({ error: 'ID da oportunidade é obrigatório na URL' }, { status: 400 });
   }

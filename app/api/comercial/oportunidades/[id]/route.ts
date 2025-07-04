@@ -62,12 +62,54 @@ function parseDateString(dateString: string | undefined | null): string | null {
   return null;
 }
 
+// Função auxiliar para converter valores monetários
+function parseValorMonetario(valor: string | number): number {
+  if (typeof valor === 'number') return valor;
+  if (!valor || typeof valor !== 'string') return 0;
+  
+  // Remove espaços e converte para string
+  const valorLimpo = valor.toString().trim();
+  
+  // Remove símbolos de moeda e espaços
+  let valorSemSimbolo = valorLimpo.replace(/[R$\s]/g, '');
+  
+  // Se não há vírgula nem ponto, é um número inteiro
+  if (!valorSemSimbolo.includes(',') && !valorSemSimbolo.includes('.')) {
+    const num = parseInt(valorSemSimbolo) || 0;
+    return num;
+  }
+  
+  // Se há vírgula, assumimos formato brasileiro (vírgula = decimal)
+  if (valorSemSimbolo.includes(',')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorSemSimbolo = valorSemSimbolo.replace(/\./g, '').replace(',', '.');
+  }
+  // Se há apenas ponto, pode ser separador decimal ou de milhares
+  else if (valorSemSimbolo.includes('.')) {
+    // Se há mais de um ponto, o último é decimal
+    const pontos = valorSemSimbolo.split('.');
+    if (pontos.length > 2) {
+      // Múltiplos pontos: os primeiros são separadores de milhares
+      const parteInteira = pontos.slice(0, -1).join('');
+      const parteDecimal = pontos[pontos.length - 1];
+      valorSemSimbolo = parteInteira + '.' + parteDecimal;
+    }
+    // Se há apenas um ponto e a parte depois tem 3 dígitos, é separador de milhares
+    else if (pontos[1] && pontos[1].length === 3 && /^\d+$/.test(pontos[1])) {
+      valorSemSimbolo = valorSemSimbolo.replace('.', '');
+    }
+    // Caso contrário, é separador decimal
+  }
+  
+  const resultado = parseFloat(valorSemSimbolo) || 0;
+  return resultado;
+}
+
 // Helper para converter valor monetário "R$ X.XXX,XX" para DECIMAL
 function parseCurrency(currencyString: string | undefined | null): number | null {
   if (!currencyString || currencyString === 'A definir') return null;
-  const cleaned = currencyString.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
-  const value = parseFloat(cleaned);
-  return isNaN(value) ? null : value;
+  const value = parseValorMonetario(currencyString);
+  return value;
 }
 
 // GET - Obter uma oportunidade específica
@@ -121,13 +163,11 @@ export async function PUT(
     const data = await request.json();
     console.log(`PUT /api/comercial/oportunidades/${id} - Atualizando oportunidade com MySQL:`, data);
 
-    if (!data.titulo || !data.clienteId) { // Validar clienteId em vez de cliente (nome)
-      return NextResponse.json({ error: 'Título e ID do cliente são obrigatórios' }, { status: 400 });
+    // Validação mais flexível para permitir atualizações parciais
+    if (data.titulo !== undefined && !data.titulo) {
+      return NextResponse.json({ error: 'Título não pode ser vazio' }, { status: 400 });
     }
-     if (!data.tipo) {
-      return NextResponse.json({ error: 'O tipo da oportunidade (produto/serviço) é obrigatório' }, { status: 400 });
-    }
-    if (data.tipo === 'produto' && !data.tipoFaturamento) {
+    if (data.tipo && data.tipo === 'produto' && data.tipoFaturamento !== undefined && !data.tipoFaturamento) {
       return NextResponse.json({ error: 'Para produtos, o tipo de faturamento é obrigatório' }, { status: 400 });
     }
 
@@ -137,24 +177,29 @@ export async function PUT(
     const prazoSql = parseDateString(data.prazo);
     const dataReuniaoSql = parseDateString(data.dataReuniao);
 
-    const fieldsToUpdate: any = {
-      titulo: data.titulo,
-      cliente_id: data.clienteId, // Deve ser o ID do cliente
-      valor: valorNumerico,
-      responsavel_id: data.responsavelId || null,
-      prazo: prazoSql,
-      status: data.status || 'novo_lead',
-      descricao: data.descricao || null,
-      tipo: data.tipo,
-      tipo_faturamento: data.tipoFaturamento || null,
-      data_reuniao: dataReuniaoSql,
-      hora_reuniao: data.horaReuniao || null,
-      probabilidade: data.probabilidade === undefined ? null : Number(data.probabilidade),
-      posicao_kanban: data.posicaoKanban === undefined ? null : Number(data.posicaoKanban),
-      motivo_perda: data.motivoPerda || null,
-      // data_atualizacao é atualizado automaticamente pelo MySQL (ON UPDATE CURRENT_TIMESTAMP)
-      // ou updated_at se for o nome da coluna no DDL
-    };
+    const fieldsToUpdate: any = {};
+    
+    // Apenas adiciona campos que foram enviados
+    if (data.titulo !== undefined) fieldsToUpdate.titulo = data.titulo;
+    if (data.clienteId !== undefined) fieldsToUpdate.cliente_id = data.clienteId;
+    if (data.valor !== undefined) fieldsToUpdate.valor = valorNumerico;
+    if (data.responsavelId !== undefined) fieldsToUpdate.responsavel_id = data.responsavelId;
+    if (data.responsavel !== undefined) {
+      // Se foi enviado o nome do responsável, buscar o ID
+      // Por enquanto, vamos manter o nome (assumindo que a tabela aceita nome)
+      // TODO: Implementar busca do ID do responsável pelo nome
+      fieldsToUpdate.responsavel_id = data.responsavelId || null;
+    }
+    if (data.prazo !== undefined) fieldsToUpdate.prazo = prazoSql;
+    if (data.status !== undefined) fieldsToUpdate.status = data.status;
+    if (data.descricao !== undefined) fieldsToUpdate.descricao = data.descricao;
+    if (data.tipo !== undefined) fieldsToUpdate.tipo = data.tipo;
+    if (data.tipoFaturamento !== undefined) fieldsToUpdate.tipo_faturamento = data.tipoFaturamento;
+    if (data.dataReuniao !== undefined) fieldsToUpdate.data_reuniao = dataReuniaoSql;
+    if (data.horaReuniao !== undefined) fieldsToUpdate.hora_reuniao = data.horaReuniao;
+    if (data.probabilidade !== undefined) fieldsToUpdate.probabilidade = data.probabilidade === null ? null : Number(data.probabilidade);
+    if (data.posicaoKanban !== undefined) fieldsToUpdate.posicao_kanban = data.posicaoKanban === null ? null : Number(data.posicaoKanban);
+    if (data.motivoPerda !== undefined) fieldsToUpdate.motivo_perda = data.motivoPerda;
     
     const fieldNames = Object.keys(fieldsToUpdate).filter(key => fieldsToUpdate[key] !== undefined);
     const fieldPlaceholders = fieldNames.map(key => `${key} = ?`).join(', ');

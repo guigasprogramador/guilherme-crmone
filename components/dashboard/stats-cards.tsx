@@ -5,6 +5,49 @@ import { DollarSign, Users, Calendar, TrendingUp, Award } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { useIsMobile } from "@/components/ui/use-mobile"
 
+// Função auxiliar para converter valores monetários
+function parseValorMonetario(valor: string | number): number {
+  if (typeof valor === 'number') return valor;
+  if (!valor || typeof valor !== 'string') return 0;
+  
+  // Remove espaços e converte para string
+  const valorLimpo = valor.toString().trim();
+  
+  // Remove símbolos de moeda e espaços
+  let valorSemSimbolo = valorLimpo.replace(/[R$\s]/g, '');
+  
+  // Se não há vírgula nem ponto, é um número inteiro
+  if (!valorSemSimbolo.includes(',') && !valorSemSimbolo.includes('.')) {
+    const num = parseInt(valorSemSimbolo) || 0;
+    return num;
+  }
+  
+  // Se há vírgula, assumimos formato brasileiro (vírgula = decimal)
+  if (valorSemSimbolo.includes(',')) {
+    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
+    valorSemSimbolo = valorSemSimbolo.replace(/\./g, '').replace(',', '.');
+  }
+  // Se há apenas ponto, pode ser separador decimal ou de milhares
+  else if (valorSemSimbolo.includes('.')) {
+    // Se há mais de um ponto, o último é decimal
+    const pontos = valorSemSimbolo.split('.');
+    if (pontos.length > 2) {
+      // Múltiplos pontos: os primeiros são separadores de milhares
+      const parteInteira = pontos.slice(0, -1).join('');
+      const parteDecimal = pontos[pontos.length - 1];
+      valorSemSimbolo = parteInteira + '.' + parteDecimal;
+    }
+    // Se há apenas um ponto e a parte depois tem 3 dígitos, é separador de milhares
+    else if (pontos[1] && pontos[1].length === 3 && /^\d+$/.test(pontos[1])) {
+      valorSemSimbolo = valorSemSimbolo.replace('.', '');
+    }
+    // Caso contrário, é separador decimal
+  }
+  
+  const resultado = parseFloat(valorSemSimbolo) || 0;
+  return resultado;
+}
+
 interface StatsCardsProps {
   oportunidades: Oportunidade[]
 }
@@ -19,8 +62,8 @@ export function StatsCards({ oportunidades }: StatsCardsProps) {
   const totalEmNegociacao = oportunidades
     .filter((o) => !["fechado_ganho", "fechado_perdido"].includes(o.status))
     .reduce((acc, o) => {
-      const valorNumerico = Number.parseFloat(o.valor.replace("R$ ", "").replace(".", "").replace(",", "."))
-      return isNaN(valorNumerico) ? acc : acc + valorNumerico
+      const valorNumerico = parseValorMonetario(o.valor)
+      return acc + valorNumerico
     }, 0)
 
   const taxaConversao = oportunidades.length > 0 ? Math.round((oportunidadesGanhas / oportunidades.length) * 100) : 0

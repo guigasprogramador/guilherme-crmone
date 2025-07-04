@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
     const tipo = formData.get('tipo') as string;
     const licitacaoId = formData.get('licitacaoId') as string | null;
     const oportunidadeId = formData.get('oportunidadeId') as string | null; // Ler oportunidadeId
+    console.log('📄 Upload - oportunidadeId recebido:', oportunidadeId);
     const descricao = formData.get('descricao') as string | null;
     const numeroDocumento = formData.get('numeroDocumento') as string | null;
     let dataValidade = formData.get('dataValidade') as string | null;
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
       nome: nome,
       tipo: tipo,
       licitacao_id: licitacaoId || null,
-      // oportunidade_id REMOVIDO pois não existe no banco
+      oportunidade_id: oportunidadeId || null, // Incluir oportunidade_id
       criado_por: userIdFromToken,
       arquivo_path: cloudinaryResult.public_id, // Store Cloudinary public_id
       url_documento: cloudinaryResult.secure_url, // Store Cloudinary secure_url
@@ -189,10 +190,10 @@ export async function POST(request: NextRequest) {
     };
 
     await connection.execute(
-      `INSERT INTO documentos (id, nome, tipo, licitacao_id, criado_por, arquivo_path, url_documento, formato, tamanho, status, descricao, numero_documento, data_validade, categoria)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO documentos (id, nome, tipo, licitacao_id, oportunidade_id, criado_por, arquivo_path, url_documento, formato, tamanho, status, descricao, numero_documento, data_validade, categoria)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        documentoDb.id, documentoDb.nome, documentoDb.tipo, documentoDb.licitacao_id, documentoDb.criado_por, documentoDb.arquivo_path, documentoDb.url_documento, documentoDb.formato, documentoDb.tamanho, documentoDb.status, documentoDb.descricao, documentoDb.numero_documento, documentoDb.data_validade, documentoDb.categoria
+        documentoDb.id, documentoDb.nome, documentoDb.tipo, documentoDb.licitacao_id, documentoDb.oportunidade_id, documentoDb.criado_por, documentoDb.arquivo_path, documentoDb.url_documento, documentoDb.formato, documentoDb.tamanho, documentoDb.status, documentoDb.descricao, documentoDb.numero_documento, documentoDb.data_validade, documentoDb.categoria
       ]
     );
 

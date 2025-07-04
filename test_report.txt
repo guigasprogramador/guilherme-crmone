@@ -1,0 +1,7 @@
+Relatório de Testes - 02/07/2025 22:25:02
+============================================================
+Sistema CRM - Validação de Melhorias
+============================================================
+
+Este relatório foi gerado automaticamente.
+Para detalhes completos, execute o script novamente.

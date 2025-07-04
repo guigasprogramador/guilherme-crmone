@@ -92,7 +92,7 @@ export async function PUT(
   context: { params: { id: string } }
 ) {
   try {
-    const { id } = context.params;
+    const { id } = await context.params;
     const data: Partial<Cliente> = await request.json();
     console.log(`Iniciando atualização para cliente ID: ${id}`, data);
 
@@ -173,7 +173,7 @@ export async function DELETE(
   context: { params: { id: string } }
 ) {
   try {
-    const { id } = context.params;
+    const { id } = await context.params;
     console.log(`Iniciando desativação (soft delete) para cliente ID: ${id}`);
 
     const conn = await getDbConnection();

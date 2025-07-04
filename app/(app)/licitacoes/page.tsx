@@ -139,17 +139,38 @@ export default function LicitacoesPage() {
     }
   }
 
+  const parseValorMonetario = (valor: string | number | null | undefined): number | null => {
+    if (valor === null || valor === undefined || valor === '') return null;
+    if (typeof valor === 'number') return valor;
+    
+    let valorStr = String(valor).trim().replace(/[R$\s]/g, '');
+    
+    if (valorStr.includes(',') && valorStr.includes('.')) {
+      valorStr = valorStr.replace(/\./g, '').replace(',', '.');
+    } else if (valorStr.includes(',') && !valorStr.includes('.')) {
+      valorStr = valorStr.replace(',', '.');
+    } else if (valorStr.includes('.')) {
+      const pontos = valorStr.split('.');
+      if (pontos.length > 2 || (pontos.length === 2 && pontos[1].length !== 2)) {
+        valorStr = valorStr.replace(/\./g, '');
+      }
+    }
+    
+    const resultado = parseFloat(valorStr);
+    return isNaN(resultado) ? null : resultado;
+  };
+
   const formatarValor = (valor?: number | string | null): string => {
-    if (valor === null || valor === undefined) return 'R$ 0,00';
-    let numValor = typeof valor === 'string' ? parseFloat(valor.replace(/\./g, '').replace(',', '.')) : valor;
-    if (isNaN(numValor)) return 'N/A';
+    if (valor === null || valor === undefined) return 'N/A';
+    const numValor = parseValorMonetario(valor);
+    if (numValor === null) return 'N/A';
     return `R$ ${numValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
   
   const formatarValorCompacto = (valor?: number | string | null): string => {
     if (valor === null || valor === undefined) return 'R$ 0';
-    let numValor = typeof valor === 'string' ? parseFloat(valor.replace(/\./g, '').replace(',', '.')) : valor;
-    if (isNaN(numValor)) return 'N/A';
+    const numValor = parseValorMonetario(valor);
+    if (numValor === null) return 'N/A';
 
     if (numValor >= 1000000) return `R$ ${(numValor / 1000000).toFixed(1)}M`;
     if (numValor >= 1000) return `R$ ${(numValor / 1000).toFixed(0)}K`; // Sem decimais para K
