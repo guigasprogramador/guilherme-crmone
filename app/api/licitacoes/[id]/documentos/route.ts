@@ -60,6 +60,79 @@ export async function GET(
   }
 }
 
+// PATCH - Vincular documentos existentes a uma licitação
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> } // id aqui é licitacaoId
+) {
+  let connection;
+  const { id: licitacaoId } = await params;
+  console.log(`PATCH /api/licitacoes/${licitacaoId}/documentos/vincular - Iniciando vinculação`);
+
+  if (!licitacaoId) {
+    return NextResponse.json({ error: 'ID da Licitação é obrigatório' }, { status: 400 });
+  }
+
+  try {
+    const { documentos_ids } = await request.json();
+
+    if (!documentos_ids || !Array.isArray(documentos_ids) || documentos_ids.length === 0) {
+      return NextResponse.json({ error: 'Lista de IDs de documentos é obrigatória' }, { status: 400 });
+    }
+
+    connection = await getDbConnection();
+    await connection.beginTransaction();
+
+    let vinculadosComSucesso = 0;
+    let errosAoVincular = 0;
+
+    for (const documentoId of documentos_ids) {
+      if (typeof documentoId !== 'string') {
+        console.warn(`ID de documento inválido ignorado: ${documentoId}`);
+        errosAoVincular++;
+        continue;
+      }
+      try {
+        const [result]: any = await connection.execute(
+          'UPDATE documentos SET licitacao_id = ?, data_atualizacao = NOW() WHERE id = ?',
+          [licitacaoId, documentoId]
+        );
+        if (result.affectedRows > 0) {
+          vinculadosComSucesso++;
+        } else {
+          // Documento pode não existir ou já estar vinculado (ou outro erro)
+          console.warn(`Documento com ID ${documentoId} não encontrado ou não atualizado.`);
+          errosAoVincular++;
+        }
+      } catch (dbError: any) {
+        console.error(`Erro ao vincular documento ${documentoId} à licitação ${licitacaoId}:`, dbError);
+        errosAoVincular++;
+      }
+    }
+
+    if (vinculadosComSucesso > 0) {
+      await connection.commit();
+      return NextResponse.json({
+        message: `${vinculadosComSucesso} documento(s) vinculado(s) com sucesso. ${errosAoVincular > 0 ? `${errosAoVincular} erro(s) ao vincular.` : ''}`
+      }, { status: 200 });
+    } else {
+      await connection.rollback();
+      return NextResponse.json({ error: 'Nenhum documento foi vinculado. Verifique os IDs fornecidos.' }, { status: 400 });
+    }
+
+  } catch (error: any) {
+    if (connection) await connection.rollback().catch(rbError => console.error("Erro no rollback da vinculação:", rbError));
+    console.error('Erro ao vincular documentos à licitação (MySQL):', error);
+    return NextResponse.json(
+      { error: 'Erro ao vincular documentos', details: error.message },
+      { status: 500 }
+    );
+  } finally {
+    if (connection) await connection.release();
+  }
+}
+
+
 // POST - Adicionar novo documento a uma licitação
 export async function POST(
   request: NextRequest,

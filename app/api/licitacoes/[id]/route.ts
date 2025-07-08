@@ -229,10 +229,10 @@ export async function PUT(
       titulo: data.titulo,
       status: data.status || 'analise_interna',
       modalidade: data.modalidade,
-      numero_processo: data.numeroProcesso || null,
+      // numero_processo: data.numeroProcesso || null, // Removido, schema usa numero_edital
       objeto: data.objeto || null,
       edital: data.edital || null,
-      numero_edital: data.numeroEdital || null,
+      numero_edital: data.numeroEdital || null, // Campo correto conforme schema
       data_abertura: parseToYYYYMMDD(data.dataAbertura),
       data_limite_proposta: parseToYYYYMMDD(data.dataLimiteProposta),
       data_julgamento: parseToYYYYMMDD(data.dataJulgamento),
@@ -368,14 +368,16 @@ export async function PATCH(
 
     // Mapear e adicionar campos da licitação principal
     const licitacaoCampos = [
-        'titulo', 'status', 'modalidade', 'numero_processo', 'objeto', 'edital', 'numero_edital',
+        'titulo', 'status', 'modalidade', /*'numero_processo',*/ 'objeto', 'edital', 'numero_edital', // numero_processo removido
         'data_abertura', 'data_limite_proposta', 'data_julgamento', 'orgao_id', 'valor_estimado', 'valor_proposta', 'valor_homologado',
         'responsavel_id', 'prazo', 'url_licitacao', 'url_edital', 'descricao', 'forma_pagamento',
         'obs_financeiras', 'tipo', 'tipo_faturamento', 'margem_lucro', 'contato_nome',
         'contato_email', 'contato_telefone', 'posicao_kanban'
     ];
     const dataMapping: Record<string, string> = { // camelCase to snake_case
-        'numeroProcesso': 'numero_processo', 'dataAbertura': 'data_abertura',
+        // 'numeroProcesso': 'numero_processo', // Removido
+        'numeroEdital': 'numero_edital', // Adicionado para garantir mapeamento se frontend enviar numeroEdital
+        'dataAbertura': 'data_abertura',
         'dataLimiteProposta': 'data_limite_proposta', 'dataJulgamento': 'data_julgamento',
         'orgaoId': 'orgao_id', 'valorEstimado': 'valor_estimado', 'valorProposta': 'valor_proposta', 'valorHomologado': 'valor_homologado', 'responsavelId': 'responsavel_id',
         'urlLicitacao': 'url_licitacao', 'urlEdital': 'url_edital', 'formaPagamento': 'forma_pagamento',
