@@ -18,10 +18,21 @@ import {
   Loader2,
   AlertCircle,
   Search,
-  Filter
+  Filter,
+  Trash2 as Trash2Icon, // Ícone para desvincular
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog" // Para confirmação
 
 interface Documento {
   id: string
@@ -47,8 +58,10 @@ interface VisualizadorDocumentosProps {
   entityType: 'oportunidade' | 'licitacao'
   title?: string
   showFilters?: boolean
-  allowUpload?: boolean
-  onDocumentUpload?: () => void
+  allowUpload?: boolean // Para upload direto no visualizador (não usado em DetalhesOportunidade)
+  onDocumentUpload?: () => void // Callback para quando upload (se permitido) for feito
+  showDesvincular?: boolean; // Nova prop para mostrar botão de desvincular
+  onDesvincularDocumento?: (documentoId: string) => Promise<void>; // Callback para desvincular
 }
 
 // Função para formatar tamanho do arquivo
@@ -93,7 +106,9 @@ export function VisualizadorDocumentos({
   title = "Documentos",
   showFilters = true,
   allowUpload = false,
-  onDocumentUpload
+  onDocumentUpload,
+  showDesvincular = false, // Default false
+  onDesvincularDocumento
 }: VisualizadorDocumentosProps) {
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [showPreview, setShowPreview] = useState(false)
@@ -101,6 +116,10 @@ export function VisualizadorDocumentos({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
+  const [showConfirmDesvincular, setShowConfirmDesvincular] = useState(false);
+  const [documentoParaDesvincularId, setDocumentoParaDesvincularId] = useState<string | null>(null);
+  const [isDesvinculando, setIsDesvinculando] = useState(false);
+
   // Estados para filtros
   const [searchTerm, setSearchTerm] = useState("")
   const [filterType, setFilterType] = useState<string>("todos")
@@ -137,7 +156,8 @@ export function VisualizadorDocumentos({
     if (entityId) {
       fetchDocumentos()
     }
-  }, [entityId, entityType])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entityId, entityType]) // fetchDocumentos não precisa ser dependência se não mudar
 
   // Filtrar documentos
   const documentosFiltrados = documentos.filter(doc => {
@@ -343,6 +363,21 @@ export function VisualizadorDocumentos({
                           >
                             <ExternalLink className="h-4 w-4" />
                           </Button>
+                          {showDesvincular && onDesvincularDocumento && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700"
+                              onClick={() => {
+                                setDocumentoParaDesvincularId(documento.id);
+                                setShowConfirmDesvincular(true);
+                              }}
+                              title="Desvincular Documento"
+                              disabled={isDesvinculando}
+                            >
+                              <Trash2Icon className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -452,6 +487,45 @@ export function VisualizadorDocumentos({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog para Confirmar Desvinculação */}
+      <AlertDialog open={showConfirmDesvincular} onOpenChange={setShowConfirmDesvincular}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Desvinculação</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja desvincular este documento da oportunidade? O documento não será excluído do repositório.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setDocumentoParaDesvincularId(null)} disabled={isDesvinculando}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (documentoParaDesvincularId && onDesvincularDocumento) {
+                  setIsDesvinculando(true);
+                  try {
+                    await onDesvincularDocumento(documentoParaDesvincularId);
+                    // A lista será atualizada pelo componente pai
+                  } catch (e) {
+                    // O componente pai deve mostrar o toast de erro
+                  } finally {
+                    setIsDesvinculando(false);
+                    setShowConfirmDesvincular(false);
+                    setDocumentoParaDesvincularId(null);
+                  }
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDesvinculando}
+            >
+              {isDesvinculando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2Icon className="h-4 w-4 mr-2" />}
+              Desvincular
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

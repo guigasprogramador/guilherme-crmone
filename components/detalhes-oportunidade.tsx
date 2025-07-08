@@ -23,8 +23,6 @@ import {
   MessageSquare,
   Edit,
   Save,
-  // ChevronLeft, // Removido se não usado
-  // ChevronRight, // Removido se não usado
   Maximize2,
   Minimize2,
   MapPin,
@@ -32,61 +30,48 @@ import {
   FileText as FileTextIcon,
   Download as DownloadIcon,
   ExternalLink as ExternalLinkIcon,
+  Link as LinkIcon,
   Loader2,
   PlusCircle as PlusCircleIcon,
   Trash2 as Trash2Icon,
-  Edit3 as Edit3Icon,
+  Edit3 as Edit3Icon, // Usado para Notas e Itens
+  Edit2 as EditReuniaoIcon, // Novo para Reuniões
   PackageIcon
 } from "lucide-react"
 import Link from "next/link"
-import { useReunioes } from "@/hooks/comercial/use-reunioes"
-import type { Reuniao as ReuniaoType, Nota } from "@/types/comercial"
-import { AgendarReuniao } from "@/components/comercial/agendar-reuniao"
+import { useReunioes, Reuniao as ReuniaoType } from "@/hooks/comercial/use-reunioes";
 import { useNotas, Nota } from "@/hooks/comercial/use-notas";
+import { AgendarReuniao } from "@/components/comercial/agendar-reuniao"
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { useOportunidadeItens, OportunidadeItem } from "@/hooks/comercial/use-oportunidade-itens";
 import { VisualizadorDocumentos } from "@/components/documentos/visualizador-documentos";
+import { SeletorDocumentosComercial } from "@/components/comercial/seletor-documentos-comercial";
+import { DocumentType } from "@/hooks/useDocuments";
 
-// Função auxiliar para converter valores monetários
 function parseValorMonetario(valor: string | number): number {
   if (typeof valor === 'number') return valor;
   if (!valor || typeof valor !== 'string') return 0;
-  
-  // Remove espaços e converte para string
   const valorLimpo = valor.toString().trim();
-  
-  // Remove símbolos de moeda e espaços
   let valorSemSimbolo = valorLimpo.replace(/[R$\s]/g, '');
-  
-  // Se não há vírgula nem ponto, é um número inteiro
   if (!valorSemSimbolo.includes(',') && !valorSemSimbolo.includes('.')) {
     const num = parseInt(valorSemSimbolo) || 0;
     return num;
   }
-  
-  // Se há vírgula, assumimos formato brasileiro (vírgula = decimal)
   if (valorSemSimbolo.includes(',')) {
-    // Remove pontos (separadores de milhares) e substitui vírgula por ponto
     valorSemSimbolo = valorSemSimbolo.replace(/\./g, '').replace(',', '.');
   }
-  // Se há apenas ponto, pode ser separador decimal ou de milhares
   else if (valorSemSimbolo.includes('.')) {
-    // Se há mais de um ponto, o último é decimal
     const pontos = valorSemSimbolo.split('.');
     if (pontos.length > 2) {
-      // Múltiplos pontos: os primeiros são separadores de milhares
       const parteInteira = pontos.slice(0, -1).join('');
       const parteDecimal = pontos[pontos.length - 1];
       valorSemSimbolo = parteInteira + '.' + parteDecimal;
     }
-    // Se há apenas um ponto e a parte depois tem 3 dígitos, é separador de milhares
     else if (pontos[1] && pontos[1].length === 3 && /^\d+$/.test(pontos[1])) {
       valorSemSimbolo = valorSemSimbolo.replace('.', '');
     }
-    // Caso contrário, é separador decimal
   }
-  
   const resultado = parseFloat(valorSemSimbolo) || 0;
   return resultado;
 }
@@ -100,29 +85,27 @@ import {
 interface Oportunidade {
   id: string
   titulo: string
-  cliente: string // Nome do cliente
-  clienteId?: string // ID do cliente
-  valor: string // Este será atualizado pela soma dos itens
-  responsavel: string // Nome do responsável
-  responsavelId?: string // ID do responsável
+  cliente: string
+  clienteId?: string
+  valor: string
+  responsavel: string
+  responsavelId?: string
   prazo: string
   status: string
   descricao?: string
-  dataAgenda?: string // Campo legado, pode ser removido se não usado
+  dataAgenda?: string
   tipo?: "produto" | "servico"
   tipoFaturamento?: "direto" | "distribuidor"
-  // dataReuniao e horaReuniao podem ser derivados da lista de reuniões
 }
 
 interface DetalhesOportunidadeProps {
   oportunidade: Oportunidade | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onClienteClick?: (clienteNome: string, clienteId?: string) => void // Passar ID também
+  onClienteClick?: (clienteNome: string, clienteId?: string) => void
   onOportunidadeNeedsRefresh?: () => void;
 }
 
-// ... (statusColors, statusLabels, flowSteps - mantidos como estão no original)
 const statusColors: Record<string, string> = {
   novo_lead: "bg-blue-100 text-blue-800 border-blue-300",
   agendamento_reuniao: "bg-indigo-100 text-indigo-800 border-indigo-300",
@@ -157,17 +140,17 @@ const flowSteps = [
 export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClienteClick, onOportunidadeNeedsRefresh }: DetalhesOportunidadeProps) {
   const [activeTab, setActiveTab] = useState("resumo")
   const [novaNota, setNovaNota] = useState("")
-  const [isEditing, setIsEditing] = useState(false) // Para edição da oportunidade principal
-  const [formData, setFormData] = useState<Partial<Oportunidade>>({})
+  const [isEditing, setIsEditing] = useState(false)
+  const [formData, setFormData] = useState<Partial<Oportunidade & { responsavelId?: string }>>({})
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const [documentosOportunidade, setDocumentosOportunidade] = useState<any[]>([])
-  const [isLoadingDocumentos, setIsLoadingDocumentos] = useState(false)
-  const [documentosCarregados, setDocumentosCarregados] = useState(false)
+  const [documentosCarregados, setDocumentosCarregados] = useState(false);
   const [showAgendarReuniaoModal, setShowAgendarReuniaoModal] = useState(false);
   const [isAddingNota, setIsAddingNota] = useState(false);
+  const [showSeletorDocumentosModal, setShowSeletorDocumentosModal] = useState(false);
+  const [isVinculandoDocumentos, setIsVinculandoDocumentos] = useState(false);
+  const [isDesvinculandoDoc, setIsDesvinculandoDoc] = useState(false);
 
-  // Estados para CRUD de Itens da Oportunidade
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [showDeleteItemConfirm, setShowDeleteItemConfirm] = useState(false);
@@ -183,15 +166,32 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
   const {
     reunioes: reunioesDaOportunidade,
     isLoading: isLoadingReunioes,
-    fetchReunioes
+    fetchReunioes,
+    // createReuniao, // Será chamado dentro de AgendarReuniao
+    updateReuniao,
+    deleteReuniao,
   } = useReunioes(oportunidade?.id);
+
+  // Estados para CRUD de Reunião
+  const [reuniaoParaEditar, setReuniaoParaEditar] = useState<ReuniaoType | null>(null);
+  const [showDeleteReuniaoConfirm, setShowDeleteReuniaoConfirm] = useState(false);
+  const [reuniaoParaExcluirId, setReuniaoParaExcluirId] = useState<string | null>(null);
+  const [isSubmittingReuniao, setIsSubmittingReuniao] = useState(false);
 
   const {
     notas: notasDaOportunidade,
     isLoading: isLoadingNotas,
     createNota,
-    fetchNotas
+    updateNota,
+    deleteNota,
+    setOportunidadeId: setOportunidadeIdParaNotas,
   } = useNotas(oportunidade?.id);
+
+  const [editingNotaId, setEditingNotaId] = useState<string | null>(null);
+  const [editText, setEditText] = useState<string>("");
+  const [isSubmittingNota, setIsSubmittingNota] = useState(false);
+  const [showDeleteNotaConfirm, setShowDeleteNotaConfirm] = useState(false);
+  const [notaParaExcluirId, setNotaParaExcluirId] = useState<string | null>(null);
 
   const {
     itens: itensDaOportunidade,
@@ -207,50 +207,142 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
     if (oportunidade) {
       setFormData({
         ...oportunidade,
+        responsavelId: oportunidade.responsavelId,
         descricao:
           oportunidade.descricao ||
           "Implementação de solução tecnológica para atender às necessidades específicas do cliente, incluindo módulos de gestão, relatórios e integrações com sistemas existentes.",
       });
-      setDocumentosOportunidade([]);
       setDocumentosCarregados(false);
-    }
-  }, [oportunidade]); // Removido activeTab para evitar re-renders desnecessários
+      if (typeof setOportunidadeIdParaNotas === 'function') {
+        setOportunidadeIdParaNotas(oportunidade.id);
+      }
+       // Fetch reuniões quando a oportunidade é carregada/alterada
+      if (oportunidade.id) {
+        fetchReunioes(oportunidade.id);
+      }
 
-  // useEffect separado para carregar dados específicos da aba
+    } else {
+      if (typeof setOportunidadeIdParaNotas === 'function') {
+        setOportunidadeIdParaNotas(undefined);
+      }
+    }
+  }, [oportunidade, setOportunidadeIdParaNotas, fetchReunioes]);
+
   useEffect(() => {
     if (oportunidade?.id) {
-      if (activeTab === "notas") fetchNotas(oportunidade.id);
-      if (activeTab === "servicos" && typeof fetchItensDaOportunidade === 'function') fetchItensDaOportunidade(oportunidade.id);
+      if (activeTab === "servicos" && typeof fetchItensDaOportunidade === 'function') {
+        fetchItensDaOportunidade(oportunidade.id);
+      }
+      if (activeTab === "documentos" && !documentosCarregados) {
+        setDocumentosCarregados(true);
+      }
     }
-  }, [activeTab, oportunidade?.id]); // Separado para controlar melhor as dependências
+  }, [activeTab, oportunidade?.id, fetchItensDaOportunidade, documentosCarregados]);
 
-  useEffect(() => {
-    if (oportunidade?.id && activeTab === "documentos" && !documentosCarregados) {
-      console.log('🔍 Iniciando carregamento de documentos para oportunidade:', oportunidade.id);
-      const fetchDocumentos = async () => {
-        setIsLoadingDocumentos(true);
-        try {
-          console.log('📡 Fazendo requisição para API de documentos...');
-          const response = await fetch(`/api/documentos/por-oportunidade?oportunidadeId=${oportunidade.id}`);
-          console.log('📡 Resposta da API:', response.status, response.statusText);
-          if (!response.ok) {
-            throw new Error('Falha ao buscar documentos da oportunidade');
-          }
-          const data = await response.json();
-          console.log('📄 Documentos recebidos:', data.length, 'documentos');
-          setDocumentosOportunidade(data);
-        } catch (error) {
-          console.error("❌ Erro ao buscar documentos:", error);
-          setDocumentosOportunidade([]);
-        } finally {
-          setIsLoadingDocumentos(false);
-          setDocumentosCarregados(true);
-          console.log('✅ Carregamento de documentos finalizado');
-        }
-      };
-      fetchDocumentos();
+
+  const handleDocumentosSelecionadosParaVinculo = async (documentosSelecionados: DocumentType[]) => {
+    if (!oportunidade || documentosSelecionados.length === 0) {
+      setShowSeletorDocumentosModal(false);
+      return;
     }
-  }, [oportunidade?.id, activeTab]); // Removido documentosCarregados das dependências
+    setIsVinculandoDocumentos(true);
+    const documentos_ids = documentosSelecionados.map(doc => doc.id);
+
+    try {
+      const response = await fetch(`/api/comercial/oportunidades/${oportunidade.id}/documentos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentos_ids }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Erro ao vincular documentos."}));
+        throw new Error(errorData.message || "Falha ao vincular documentos.");
+      }
+
+      const result = await response.json();
+      toast({
+        title: "Sucesso",
+        description: result.message || `${result.vinculados || 0} documento(s) vinculado(s) com sucesso.`,
+      });
+      setDocumentosCarregados(false);
+      setShowSeletorDocumentosModal(false);
+    } catch (error) {
+      toast({
+        title: "Erro ao Vincular Documentos",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsVinculandoDocumentos(false);
+    }
+  };
+
+  const handleDesvincularDocumento = async (documentoId: string) => {
+    if (!oportunidade?.id) {
+      toast({ title: "Erro", description: "ID da oportunidade não encontrado.", variant: "destructive" });
+      return;
+    }
+    setIsDesvinculandoDoc(true);
+    try {
+      const response = await fetch(`/api/comercial/oportunidades/${oportunidade.id}/documentos?documento_id=${documentoId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: "Erro ao desvincular documento." }));
+        throw new Error(errorData.message || "Falha ao desvincular documento.");
+      }
+
+      const result = await response.json();
+      toast({
+        title: "Sucesso",
+        description: result.message || "Documento desvinculado com sucesso.",
+      });
+      setDocumentosCarregados(false);
+    } catch (error) {
+      toast({
+        title: "Erro ao Desvincular Documento",
+        description: error instanceof Error ? error.message : "Ocorreu um erro desconhecido.",
+        variant: "destructive",
+      });
+      setDocumentosCarregados(false);
+    } finally {
+      setIsDesvinculandoDoc(false);
+    }
+  };
+
+  const handleEditReuniaoClick = (reuniao: ReuniaoType) => {
+    setReuniaoParaEditar(reuniao);
+    setShowAgendarReuniaoModal(true);
+  };
+
+  const handleDeleteReuniaoClick = (reuniaoId: string) => {
+    setReuniaoParaExcluirId(reuniaoId);
+    setShowDeleteReuniaoConfirm(true);
+  };
+
+  const handleConfirmDeleteReuniao = async () => {
+    if (!reuniaoParaExcluirId || !oportunidade?.id) return;
+    setIsSubmittingReuniao(true);
+    try {
+      await deleteReuniao(reuniaoParaExcluirId);
+      toast({ title: "Sucesso", description: "Reunião excluída." });
+      fetchReunioes(oportunidade.id); // Recarregar reuniões
+    } catch (error) {
+      toast({ title: "Erro", description: `Falha ao excluir reunião: ${error instanceof Error ? error.message : "Erro desconhecido"}`, variant: "destructive" });
+    } finally {
+      setIsSubmittingReuniao(false);
+      setShowDeleteReuniaoConfirm(false);
+      setReuniaoParaExcluirId(null);
+    }
+  };
+
+  const handleReuniaoSalva = () => {
+    if(oportunidade?.id) fetchReunioes(oportunidade.id);
+    setShowAgendarReuniaoModal(false);
+    setReuniaoParaEditar(null);
+  };
 
   const adicionarNota = async () => {
     if (!novaNota.trim() || !oportunidade?.id || !user?.id) {
@@ -259,13 +351,65 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
     }
     setIsAddingNota(true);
     try {
-      await createNota({ oportunidadeId: oportunidade.id, autorId: user.id, autor: user.name, texto: novaNota.trim() });
+      await createNota({
+        oportunidadeId: oportunidade.id,
+        autorId: user.id,
+        texto: novaNota.trim(),
+      });
       setNovaNota("");
       toast({ title: "Sucesso", description: "Nota adicionada." });
     } catch (error) {
       toast({ title: "Erro", description: `Falha ao adicionar nota: ${error instanceof Error ? error.message : "Erro desconhecido"}`, variant: "destructive" });
     } finally {
       setIsAddingNota(false);
+    }
+  };
+
+  const handleEditNotaClick = (nota: Nota) => {
+    setEditingNotaId(nota.id);
+    setEditText(nota.texto);
+  };
+
+  const handleCancelEditNota = () => {
+    setEditingNotaId(null);
+    setEditText("");
+  };
+
+  const handleSaveNota = async (notaId: string) => {
+    if (!editText.trim()) {
+      toast({ title: "Erro", description: "O texto da nota não pode ser vazio.", variant: "destructive" });
+      return;
+    }
+    setIsSubmittingNota(true);
+    try {
+      await updateNota(notaId, { texto: editText.trim() });
+      toast({ title: "Sucesso", description: "Nota atualizada." });
+      setEditingNotaId(null);
+      setEditText("");
+    } catch (error) {
+      toast({ title: "Erro", description: `Falha ao atualizar nota: ${error instanceof Error ? error.message : "Erro desconhecido"}`, variant: "destructive" });
+    } finally {
+      setIsSubmittingNota(false);
+    }
+  };
+
+  const handleDeleteNotaClick = (notaId: string) => {
+    setNotaParaExcluirId(notaId);
+    setShowDeleteNotaConfirm(true);
+  };
+
+  const handleConfirmDeleteNota = async () => {
+    if (!notaParaExcluirId) return;
+    setIsSubmittingNota(true);
+    try {
+      await deleteNota(notaParaExcluirId);
+      toast({ title: "Sucesso", description: "Nota excluída." });
+      setNotaParaExcluirId(null);
+      setShowDeleteNotaConfirm(false);
+    } catch (error) {
+      toast({ title: "Erro", description: `Falha ao excluir nota: ${error instanceof Error ? error.message : "Erro desconhecido"}`, variant: "destructive" });
+    } finally {
+      setIsSubmittingNota(false);
     }
   };
 
@@ -353,18 +497,23 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
     if (!oportunidade?.id) return;
     
     try {
+      const payload: any = {
+        titulo: formData.titulo,
+        status: formData.status,
+        descricao: formData.descricao,
+      };
+
+      if (formData.prazo) payload.prazo = formData.prazo;
+      if (formData.responsavelId) payload.responsavelId = formData.responsavelId;
+      if (formData.tipo) payload.tipo = formData.tipo;
+      if (formData.tipoFaturamento) payload.tipoFaturamento = formData.tipoFaturamento;
+
       const response = await fetch(`/api/comercial/oportunidades/${oportunidade.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-           titulo: formData.titulo,
-           valor: parseValorMonetario(formData.valor || '0'),
-           status: formData.status,
-           descricao: formData.descricao,
-           responsavel: formData.responsavel,
-         }),
+        body: JSON.stringify(payload),
       });
       
       if (!response.ok) {
@@ -378,7 +527,6 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
       
       setIsEditing(false);
       
-      // Atualiza a lista de oportunidades
       if (onOportunidadeNeedsRefresh) {
         onOportunidadeNeedsRefresh();
       }
@@ -427,7 +575,6 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
               <Badge className={statusColors[oportunidade.status]}>{statusLabels[oportunidade.status]}</Badge>
               <Badge variant="outline" className="flex items-center gap-1">
                 <DollarSign className="w-3 h-3" />
-                {/* O valor exibido aqui deve ser o da oportunidade (que é atualizado pela API de itens) */}
                 {parseFloat(oportunidade.valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
               </Badge>
               <Badge variant="outline" className="flex items-center gap-1"><Clock className="w-3 h-3" /> Prazo: {oportunidade.prazo}</Badge>
@@ -451,28 +598,15 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
               <TabsTrigger value="documentos">Documentos</TabsTrigger>
             </TabsList>
 
-            {/* Aba Resumo (mantida como estava, mas o valor da oportunidade deve refletir o total dos itens) */}
             {activeTab === "resumo" && (
               <div className="space-y-4">
-                {/* ... Conteúdo da aba Resumo ... (sem alterações diretas nesta etapa, mas o campo formData.valor deve ser atualizado) */}
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-4">
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Valor da Oportunidade</h3>
-                    {isEditing ? (
-                      <div className="mt-1">
-                        <Input 
-                          value={formData.valor} 
-                          onChange={(e) => handleFieldChange("valor", e.target.value)} 
-                          placeholder="Ex: R$ 50.000,00"
-                          className="mt-1"
-                        />
-                      </div>
-                    ) : (
-                      <p className="mt-1 font-medium">
-                        {parseFloat(formData.valor || "0").toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </p>
-                    )}
+                    <p className="mt-1 font-medium">
+                      {parseFloat(oportunidade.valor || "0").toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
                   <div>
                     <h3 className="text-sm font-medium text-gray-500">Descrição da Demanda</h3>
@@ -525,28 +659,30 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
                     <h3 className="text-sm font-medium text-gray-500">Usuário Responsável</h3>
                     {isEditing ? (
                       <div className="mt-1">
-                        <Select value={formData.responsavel} onValueChange={(value) => handleFieldChange("responsavel", value)}>
+                        <Select
+                          value={formData.responsavelId || oportunidade.responsavelId}
+                          onValueChange={(value) => handleFieldChange("responsavelId", value)}
+                        >
                           <SelectTrigger><SelectValue placeholder="Selecione o responsável" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="Ana Silva">Ana Silva</SelectItem>
-                            <SelectItem value="Carlos Oliveira">Carlos Oliveira</SelectItem>
+                            <SelectItem value={oportunidade.responsavelId || "id_placeholder"}>{oportunidade.responsavel || "Selecione"}</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2 mt-1">
-                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-xs text-indigo-800">{formData.responsavel?.charAt(0) || "?"}</div>
-                        <span>{formData.responsavel}</span>
+                        <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-xs text-indigo-800">
+                           {oportunidade.responsavel?.charAt(0) || "?"}
+                        </div>
+                        <span>{oportunidade.responsavel}</span>
                       </div>
                     )}
                   </div>
-                  {/* Outros campos do resumo */}
                 </div>
               </div>
               </div>
             )}
 
-            {/* Aba Itens/Serviços */}
             {activeTab === "servicos" && (
             <div className="space-y-4">
               <div className="flex justify-between items-center mb-4">
@@ -619,35 +755,196 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
             </div>
           )}
 
-            {/* ... Outras Abas (Agendamentos, Notas, Documentos) ... */}
             {activeTab === "agendamentos" && (
               <div className="space-y-4">
-                <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-medium">Agendamentos</h3><Button size="sm" onClick={() => setShowAgendarReuniaoModal(true)} disabled={!oportunidade}><PlusCircleIcon className="w-4 h-4 mr-2" />Agendar Nova Reunião</Button></div>
-                {isLoadingReunioes ? (<div className="flex items-center justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /><p className="ml-2 text-muted-foreground">Carregando reuniões...</p></div>) : reunioesDaOportunidade.length > 0 ? (<div className="space-y-3">{reunioesDaOportunidade.map((reuniao: ReuniaoType) => (<div key={reuniao.id} className="border rounded-lg p-4 hover:border-gray-400 transition-colors"><div className="flex justify-between items-start"><div><h4 className="font-medium">{reuniao.titulo}</h4><p className="text-sm text-muted-foreground mt-1">{new Date(reuniao.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} {' às '} {new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} {reuniao.local && ` - ${reuniao.local}`}</p></div><Badge variant={reuniao.concluida ? 'default' : 'outline'} className={reuniao.concluida ? 'bg-green-100 text-green-800' : ''}>{reuniao.concluida ? "Concluída" : "Pendente"}</Badge></div>{reuniao.participantes && reuniao.participantes.length > 0 && (<div className="mt-2"><h5 className="text-xs font-medium text-muted-foreground">Participantes:</h5><div className="flex flex-wrap gap-1 mt-1">{reuniao.participantes.map((p: string, idx: number) => (<Badge key={idx} variant="secondary" className="text-xs">{p}</Badge>))}</div></div>)}{reuniao.notas && (<div className="mt-2"><h5 className="text-xs font-medium text-muted-foreground">Notas:</h5><p className="text-sm text-gray-600 whitespace-pre-wrap">{reuniao.notas}</p></div>)}</div>))}</div>) : (<div className="text-center py-6"><CalendarIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" /><p className="text-muted-foreground">Nenhuma reunião agendada.</p></div>)}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium">Agendamentos</h3>
+                  <Button size="sm" onClick={() => { setReuniaoParaEditar(null); setShowAgendarReuniaoModal(true);}} disabled={!oportunidade || isSubmittingReuniao}>
+                    <PlusCircleIcon className="w-4 h-4 mr-2" />Agendar Nova Reunião
+                  </Button>
+                </div>
+                {isLoadingReunioes && !reunioesDaOportunidade.length ? (
+                  <div className="flex items-center justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /><p className="ml-2 text-muted-foreground">Carregando reuniões...</p></div>
+                ) : reunioesDaOportunidade.length > 0 ? (
+                  <div className="space-y-3">
+                    {reunioesDaOportunidade.map((reuniao: ReuniaoType) => (
+                      <div key={reuniao.id} className="border rounded-lg p-4 hover:border-gray-400 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h4 className="font-medium">{reuniao.titulo}</h4>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {new Date(reuniao.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                              {' às '}
+                              {reuniao.hora || (reuniao.data ? new Date(reuniao.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '')}
+                              {reuniao.local && ` - ${reuniao.local}`}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Badge variant={reuniao.concluida ? 'default' : 'outline'} className={reuniao.concluida ? 'bg-green-100 text-green-800' : ''}>
+                              {reuniao.concluida ? "Concluída" : "Pendente"}
+                            </Badge>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditReuniaoClick(reuniao)} disabled={isSubmittingReuniao}>
+                              <EditReuniaoIcon className="h-4 w-4 text-blue-600" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteReuniaoClick(reuniao.id)} disabled={isSubmittingReuniao}>
+                              <Trash2Icon className="h-4 w-4 text-red-600" />
+                            </Button>
+                          </div>
+                        </div>
+                        {Array.isArray(reuniao.participantes) && reuniao.participantes.length > 0 && (
+                          <div className="mt-2">
+                            <h5 className="text-xs font-medium text-muted-foreground">Participantes:</h5>
+                            <div className="flex flex-wrap gap-1 mt-1">{(reuniao.participantes as any[]).map((p: any, idx: number) => (
+                              <Badge key={idx} variant="secondary" className="text-xs">{typeof p === 'string' ? p : p.nome || p.participante_id}</Badge>
+                            ))}</div>
+                          </div>
+                        )}
+                        {reuniao.notas && (
+                          <div className="mt-2">
+                            <h5 className="text-xs font-medium text-muted-foreground">Pauta/Notas da Reunião:</h5>
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">{reuniao.notas}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <CalendarIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">Nenhuma reunião agendada.</p>
+                  </div>
+                )}
               </div>
             )}
-            {oportunidade && (<AgendarReuniao open={showAgendarReuniaoModal} onOpenChange={setShowAgendarReuniaoModal} oportunidadeId={oportunidade.id} clienteId={oportunidade.clienteId} clienteNome={oportunidade.cliente} onReuniaoAgendada={() => { if (oportunidade?.id) fetchReunioes(oportunidade.id); setShowAgendarReuniaoModal(false); }} />)}
+            {oportunidade && (
+              <AgendarReuniao
+                open={showAgendarReuniaoModal}
+                onOpenChange={(isOpen) => {
+                  setShowAgendarReuniaoModal(isOpen);
+                  if (!isOpen) setReuniaoParaEditar(null);
+                }}
+                oportunidadeId={oportunidade.id}
+                clienteId={oportunidade.clienteId}
+                clienteNome={oportunidade.cliente}
+                onReuniaoAgendada={handleReuniaoSalva}
+                reuniaoParaEditar={reuniaoParaEditar}
+              />
+            )}
+
             {activeTab === "notas" && (
               <div className="space-y-4">
-                <div className="flex flex-col gap-2"><Label htmlFor="nova-nota">Adicionar nota</Label><Textarea id="nova-nota" placeholder="Digite uma nova nota..." value={novaNota} onChange={(e) => setNovaNota(e.target.value)} rows={3} disabled={isAddingNota} /><div className="flex justify-end"><Button size="sm" onClick={adicionarNota} disabled={!novaNota.trim() || isAddingNota}>{isAddingNota ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageSquare className="w-4 h-4 mr-2" />} {isAddingNota ? "Adicionando..." : "Adicionar"}</Button></div></div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="nova-nota">Adicionar nota</Label>
+                  <Textarea id="nova-nota" placeholder="Digite uma nova nota..." value={novaNota} onChange={(e) => setNovaNota(e.target.value)} rows={3} disabled={isAddingNota || isSubmittingNota} />
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={adicionarNota} disabled={!novaNota.trim() || isAddingNota || isSubmittingNota}>
+                      {isAddingNota ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <MessageSquare className="w-4 h-4 mr-2" />}
+                      {isAddingNota ? "Adicionando..." : "Adicionar"}
+                    </Button>
+                  </div>
+                </div>
                 <Separator />
-                {isLoadingNotas ? (<div className="flex items-center justify-center py-6"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /><p className="ml-2 text-muted-foreground">Carregando notas...</p></div>) : notasDaOportunidade.length > 0 ? (<div className="space-y-4">{notasDaOportunidade.map((nota: Nota) => (<div key={nota.id} className="border rounded-lg p-4 bg-white shadow-sm"><div className="flex justify-between items-start mb-2"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold text-gray-600">{nota.autor ? nota.autor.substring(0, 2).toUpperCase() : "SN"}</div><div><p className="font-medium text-sm">{nota.autor || "Usuário desconhecido"}</p><p className="text-xs text-gray-500">{new Date(nota.data).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'})}</p></div></div></div><p className="text-sm text-gray-700 whitespace-pre-wrap">{nota.texto}</p></div>))}</div>) : (<div className="text-center py-6"><MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-3" /><p className="text-muted-foreground">Nenhuma nota adicionada.</p></div>)}
+                {isLoadingNotas && !notasDaOportunidade.length ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    <p className="ml-2 text-muted-foreground">Carregando notas...</p>
+                  </div>
+                ) : notasDaOportunidade.length > 0 ? (
+                  <div className="space-y-4">
+                    {notasDaOportunidade.map((nota: Nota) => (
+                      <div key={nota.id} className="border rounded-lg p-4 bg-white shadow-sm">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-semibold text-gray-600">
+                              {nota.autor ? nota.autor.substring(0, 2).toUpperCase() : "SN"}
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">{nota.autor || "Usuário desconhecido"}</p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(nota.createdAt || nota.data || Date.now()).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                {nota.updatedAt && nota.updatedAt !== nota.createdAt && <span className="italic ml-1">(editado)</span>}
+                              </p>
+                            </div>
+                          </div>
+                          {editingNotaId !== nota.id && (
+                            <div className="flex space-x-1">
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditNotaClick(nota)} disabled={isSubmittingNota}>
+                                <Edit3Icon className="h-4 w-4 text-blue-600" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDeleteNotaClick(nota.id)} disabled={isSubmittingNota}>
+                                <Trash2Icon className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        {editingNotaId === nota.id ? (
+                          <div className="mt-2 space-y-2">
+                            <Textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              rows={3}
+                              className="text-sm"
+                              disabled={isSubmittingNota}
+                            />
+                            <div className="flex justify-end space-x-2">
+                              <Button variant="ghost" size="sm" onClick={handleCancelEditNota} disabled={isSubmittingNota}>Cancelar</Button>
+                              <Button size="sm" onClick={() => handleSaveNota(nota.id)} disabled={isSubmittingNota || !editText.trim()}>
+                                {isSubmittingNota ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                                Salvar
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{nota.texto}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                    <p className="text-muted-foreground">Nenhuma nota adicionada.</p>
+                  </div>
+                )}
               </div>
             )}
+
             {activeTab === "documentos" && (
-              <VisualizadorDocumentos
-                entityId={oportunidade?.id || ''}
-                entityType="oportunidade"
-                title="Documentos da Oportunidade"
-                showFilters={true}
-                allowUpload={false}
-              />
+              <div className="space-y-4">
+                <div className="flex justify-between items-center mb-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setShowSeletorDocumentosModal(true)}
+                    disabled={isVinculandoDocumentos || !oportunidade || isDesvinculandoDoc}
+                  >
+                    {isVinculandoDocumentos ? <Loader2 className="h-4 w-4 mr-2 animate-spin"/> : <LinkIcon className="h-4 w-4 mr-2" />}
+                    Vincular Documento Existente
+                  </Button>
+                </div>
+                <VisualizadorDocumentos
+                  key={documentosCarregados ? `docs-loaded-${oportunidade?.id}` : `docs-reloading-${oportunidade?.id}`}
+                  entityId={oportunidade?.id || ''}
+                  entityType="oportunidade"
+                  title="Documentos da Oportunidade"
+                  showFilters={true}
+                  allowUpload={false}
+                  showDesvincular={true}
+                  onDesvincularDocumento={handleDesvincularDocumento}
+                />
+              </div>
             )}
           </Tabs>
         </SheetContent>
       </Sheet>
 
-      {/* Modal Adicionar Item */}
+      {oportunidade && showSeletorDocumentosModal && (
+        <SeletorDocumentosComercial
+          open={showSeletorDocumentosModal}
+          onOpenChange={setShowSeletorDocumentosModal}
+          onDocumentosSelecionados={handleDocumentosSelecionadosParaVinculo}
+        />
+      )}
+
       {oportunidade && (
         <Dialog open={showAddItemModal} onOpenChange={setShowAddItemModal}>
           <DialogContent>
@@ -675,7 +972,6 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
         </Dialog>
       )}
 
-      {/* Modal Editar Item */}
       {oportunidade && editItemFormData && (
         <Dialog open={showEditItemModal} onOpenChange={(isOpen) => {
           setShowEditItemModal(isOpen);
@@ -706,11 +1002,10 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
         </Dialog>
       )}
 
-      {/* AlertDialog para Excluir Item */}
       <AlertDialog open={showDeleteItemConfirm} onOpenChange={setShowDeleteItemConfirm}>
           <AlertDialogContent>
               <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                  <AlertDialogTitle>Confirmar Exclusão do Item</AlertDialogTitle>
                   <AlertDialogDescription>
                       Tem certeza que deseja excluir este item da oportunidade? Esta ação não pode ser desfeita.
                   </AlertDialogDescription>
@@ -726,6 +1021,49 @@ export function DetalhesOportunidade({ oportunidade, open, onOpenChange, onClien
                   </AlertDialogAction>
               </AlertDialogFooter>
           </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showDeleteNotaConfirm} onOpenChange={setShowDeleteNotaConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão da Nota</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta nota? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setNotaParaExcluirId(null)} disabled={isSubmittingNota}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteNota}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isSubmittingNota}
+            >
+              {isSubmittingNota ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2Icon className="h-4 w-4 mr-2" />} Excluir Nota
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog para Excluir Reunião */}
+      <AlertDialog open={showDeleteReuniaoConfirm} onOpenChange={setShowDeleteReuniaoConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão da Reunião</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta reunião? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setReuniaoParaExcluirId(null)} disabled={isSubmittingReuniao}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteReuniao}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isSubmittingReuniao}
+            >
+              {isSubmittingReuniao ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2Icon className="h-4 w-4 mr-2" />} Excluir Reunião
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
       </AlertDialog>
     </>
   )
