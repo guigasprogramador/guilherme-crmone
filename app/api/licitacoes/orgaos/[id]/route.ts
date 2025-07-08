@@ -203,9 +203,25 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   let connection;
   try {
     connection = await getDbConnection();
+
+    // Verificar se existem licitações associadas a este órgão
+    const [licitacoesAssociadas]: any = await connection.execute(
+      'SELECT COUNT(*) as count FROM licitacoes WHERE orgao_id = ?',
+      [id]
+    );
+
+    if (licitacoesAssociadas[0].count > 0) {
+      return NextResponse.json(
+        { error: `Este órgão não pode ser excluído pois está associado a ${licitacoesAssociadas[0].count} licitação(ões). Por favor, reatribua ou arquive essas licitações primeiro.` },
+        { status: 409 } // 409 Conflict
+      );
+    }
+
+    // Se não houver licitações, prosseguir com a exclusão
     await connection.beginTransaction();
 
-    // 1. Delete associated contacts
+    // 1. Delete associated contacts (orgao_contatos.orgao_id has ON DELETE CASCADE from schema/licitacoes/01_tables.sql, so this is redundant if cascade is active and working as expected)
+    // No entanto, para garantir, podemos manter a exclusão explícita.
     const [deleteContatosResult]: any = await connection.execute('DELETE FROM orgao_contatos WHERE orgao_id = ?', [id]);
     console.log(`Contatos excluídos para o órgão ID ${id}: ${deleteContatosResult.affectedRows} linhas afetadas.`);
 
@@ -213,17 +229,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const [deleteOrgaoResult]: any = await connection.execute('DELETE FROM orgaos WHERE id = ?', [id]);
 
     if (deleteOrgaoResult.affectedRows === 0) {
-      await connection.rollback(); // Rollback if organ was not found
+      await connection.rollback();
       return NextResponse.json({ error: 'Órgão não encontrado' }, { status: 404 });
     }
 
     await connection.commit();
     console.log(`Órgão ID ${id} e seus contatos associados foram excluídos com sucesso.`);
-    // Return 204 No Content for successful deletion without a body
-    // return new NextResponse(null, { status: 204 });
-    // Or return 200 with a success message
     return NextResponse.json({ message: 'Órgão e contatos associados excluídos com sucesso' });
-
 
   } catch (error: any) {
     console.error(`Erro ao excluir órgão ID ${id} (MySQL):`, error);

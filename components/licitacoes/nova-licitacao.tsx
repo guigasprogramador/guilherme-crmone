@@ -77,8 +77,9 @@ export function NovaLicitacao({
     status: "analise_interna",
     tipo: "",
     tipoFaturamento: "",
-    responsavel: "",
-    orgaoId: "", // Adicionado para armazenar o ID do órgão
+    responsavel: "", // Manter para possível nome, mas priorizar responsavelId
+    responsavelId: "", // Novo campo para o ID do responsável principal
+    orgaoId: "",
   };
   const [formData, setFormData] = useState(initialFormData);
 
@@ -120,55 +121,56 @@ export function NovaLicitacao({
   // const { getAccessToken } = useAuth(); // TODO: Implementar obtenção de token via useAuth
 
   useEffect(() => {
-    const carregarUsuariosParaResponsaveis = async () => {
+    const carregarDadosAuxiliares = async () => {
       if (open) {
+        // Carregar Usuários para Responsáveis
         try {
-          // TODO: Refatorar obtenção de token para usar useAuth ou wrapper de API.
           const token = localStorage.getItem('accessToken');
-          // Ajuste a URL da API e os query params conforme necessário
-          const response = await fetch('/api/users?filterByRole=user&filterByRole=admin', {
+          const response = await fetch('/api/users?filterByRole=user&filterByRole=admin', { // Idealmente filtrar por roles que podem ser responsáveis
             headers: { 'Authorization': `Bearer ${token}` }
           });
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: "Falha ao buscar usuários" }));
-            throw new Error(errorData.message || "Falha ao buscar usuários");
-          }
+          if (!response.ok) throw new Error("Falha ao buscar usuários");
           const usersFromApi = await response.json();
-
-          // A API agora retorna o array de usuários diretamente
           const responsaveisFormatadosApi = usersFromApi.map((u: any) => ({
             id: u.id,
-            nome: u.name || u.nome_completo || u.email // Ajuste os campos
+            nome: u.name || u.nome_completo || u.email
           }));
           setTodosResponsaveisApi(responsaveisFormatadosApi);
 
+          // Configurar responsáveis para o checklist e para o select do responsável principal
           let responsaveisParaChecklist = responsaveisFormatadosApi.map((r: any) => ({
             id: r.id,
             nome: r.nome,
             selecionado: false,
           }));
 
-          if (licitacaoParaEditar && licitacaoParaEditar.responsaveis && licitacaoParaEditar.responsaveis.length > 0) {
-            // A API de licitação retorna um array de objetos {id, nome, email, pivot: {papel}}
-            // ou um formato diferente. Ajuste conforme a estrutura real de licitacaoParaEditar.responsaveis
-            const idsResponsaveisEdicao = licitacaoParaEditar.responsaveis.map((r: any) => (r as any).id || r);
-            responsaveisParaChecklist = responsaveisParaChecklist.map((r: any) => ({
-              ...r,
-              selecionado: idsResponsaveisEdicao.includes(r.id),
-            }));
+          if (isEditMode && licitacaoParaEditar) {
+            // Pré-selecionar múltiplos responsáveis
+            if (licitacaoParaEditar.responsaveis && licitacaoParaEditar.responsaveis.length > 0) {
+              const idsResponsaveisEdicao = licitacaoParaEditar.responsaveis.map((r: any) => r.id || r);
+              responsaveisParaChecklist = responsaveisParaChecklist.map((r: any) => ({
+                ...r,
+                selecionado: idsResponsaveisEdicao.includes(r.id),
+              }));
+            }
+            // Definir responsável principal
+            setFormData(prev => ({ ...prev, responsavelId: licitacaoParaEditar.responsavelId || "" }));
           }
           setResponsaveis(responsaveisParaChecklist);
 
         } catch (error) {
           console.error("Erro ao buscar usuários para responsáveis:", error);
-          setResponsaveis([ { id: "placeholder", nome: "Erro ao carregar responsáveis", selecionado: false } ]);
+          setResponsaveis([{ id: "placeholder", nome: "Erro ao carregar", selecionado: false }]);
+          setTodosResponsaveisApi([]);
         }
+
+        // Carregar Documentos do Repositório (já existente no hook useEffect abaixo, pode ser combinado)
       }
     };
 
-    carregarUsuariosParaResponsaveis();
+    carregarDadosAuxiliares();
 
-    if (licitacaoParaEditar) {
+    if (isEditMode && licitacaoParaEditar) {
       setFormData({
         nome: licitacaoParaEditar.titulo || "",
         orgao: typeof licitacaoParaEditar.orgao === 'string' ? licitacaoParaEditar.orgao : licitacaoParaEditar.orgao?.nome || "",
@@ -176,7 +178,7 @@ export function NovaLicitacao({
         descricao: licitacaoParaEditar.objeto || licitacaoParaEditar.descricao || "",
         numeroEdital: licitacaoParaEditar.numeroEdital || licitacaoParaEditar.edital || "",
         modalidade: licitacaoParaEditar.modalidade || "pregao_eletronico",
-        valorEstimado: licitacaoParaEditar.valorEstimado?.toString() || "", // API retorna string formatada, o hook retorna número
+        valorEstimado: licitacaoParaEditar.valorEstimado?.toString() || "",
         valorProposta: licitacaoParaEditar.valorProposta?.toString() || "",
         margemLucro: licitacaoParaEditar.margemLucro?.toString() || "",
         contatoNome: licitacaoParaEditar.contatoNome || "",
@@ -186,19 +188,43 @@ export function NovaLicitacao({
         status: licitacaoParaEditar.status || "analise_interna",
         tipo: licitacaoParaEditar.tipo || "",
         tipoFaturamento: licitacaoParaEditar.tipoFaturamento || "",
-        responsavel: licitacaoParaEditar.responsavel || "",
+        responsavel: licitacaoParaEditar.responsavel || "", // Nome para exibição, se necessário
+        responsavelId: licitacaoParaEditar.responsavelId || "", // ID para o select
       });
       setDataPublicacao(licitacaoParaEditar.dataPublicacao ? parseISO(licitacaoParaEditar.dataPublicacao) : undefined);
-      setPrazoEnvio(licitacaoParaEditar.dataAbertura ? parseISO(licitacaoParaEditar.dataAbertura) : undefined);
-      setDataJulgamento(licitacaoParaEditar.dataJulgamento ? parseISO(licitacaoParaEditar.dataJulgamento) : undefined);
+      // Ajuste para dataAbertura (prazoEnvio no form simplificado)
+      const dataAberturaString = licitacaoParaEditar.dataAbertura; // DD/MM/YYYY
+      if (dataAberturaString && typeof dataAberturaString === 'string') {
+          const parts = dataAberturaString.split('/');
+          if (parts.length === 3) {
+              setPrazoEnvio(new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])));
+          } else {
+             try { setPrazoEnvio(parseISO(dataAberturaString)); } catch (e) { console.warn("Data Abertura inválida:", dataAberturaString); setPrazoEnvio(undefined); }
+          }
+      } else {
+          setPrazoEnvio(undefined);
+      }
 
-    // A lógica de pré-seleção de responsáveis foi movida para carregarUsuariosParaResponsaveis
+      const dataJulgamentoString = licitacaoParaEditar.dataJulgamento; // DD/MM/YYYY
+       if (dataJulgamentoString && typeof dataJulgamentoString === 'string') {
+          const parts = dataJulgamentoString.split('/');
+          if (parts.length === 3) {
+            setDataJulgamento(new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0])));
+          } else {
+             try { setDataJulgamento(parseISO(dataJulgamentoString)); } catch (e) { console.warn("Data Julgamento inválida:", dataJulgamentoString); setDataJulgamento(undefined); }
+          }
+      } else {
+          setDataJulgamento(undefined);
+      }
+      // Adicionar lógica para pré-selecionar documentos do repositório se estiver editando
+      // e se licitacaoParaEditar.documentos contiver essa informação.
+      if (licitacaoParaEditar.documentos && Array.isArray(licitacaoParaEditar.documentos)) {
+        setDocumentosSelecionados(licitacaoParaEditar.documentos.map(d => d.id).filter(Boolean) as string[]);
+      }
+
+
     } else {
-      // Resetar para o estado inicial se não houver licitação para editar (modo de criação)
-      // E também resetar a lista de responsáveis se não estiver editando.
       setFormData(initialFormData);
-      // Se todosResponsaveisApi já foi carregado, use-o para resetar 'responsaveis'
-      // caso contrário, será uma lista vazia até carregarUsuariosParaResponsaveis rodar.
       setResponsaveis(todosResponsaveisApi.map(r => ({ id: r.id, nome: r.nome, selecionado: false })));
       setDataPublicacao(undefined);
       setPrazoEnvio(undefined);
@@ -206,7 +232,7 @@ export function NovaLicitacao({
       setDocumentosSelecionados([]);
       setArquivosAnexados([]);
     }
-  }, [licitacaoParaEditar, open]); // Adicionar 'open' para resetar/preencher quando o modal abrir
+  }, [licitacaoParaEditar, open, isEditMode]); // Removido todosResponsaveisApi, pois é setado dentro de carregarDadosAuxiliares
 
 
   useEffect(() => {
@@ -349,13 +375,15 @@ export function NovaLicitacao({
     }
 
     if (isSimplifiedForm) {
-      if (!formData.nome || !formData.orgao || !prazoEnvio || !dataJulgamento || !formData.responsavel) {
-        toast({ title: "Erro", description: "Formulário Simplificado: Nome, Órgão, Data da Licitação, Data do Julgamento e Responsável são obrigatórios.", variant: "destructive" });
+      // No formulário simplificado, o campo `formData.responsavel` (texto) era usado. Agora usaremos `formData.responsavelId`.
+      if (!formData.nome || !formData.orgao || !prazoEnvio || !dataJulgamento || !formData.responsavelId) {
+        toast({ title: "Erro", description: "Formulário Simplificado: Nome, Órgão, Data da Licitação, Data do Julgamento e Responsável ID são obrigatórios.", variant: "destructive" });
         return;
       }
     } else {
-      if (!formData.nome || !formData.orgao || !prazoEnvio || !dataJulgamento || !formData.tipo || !formData.responsavel) {
-        toast({ title: "Erro", description: "Formulário Completo: Nome, Órgão, Prazo Envio, Data Julgamento, Tipo e Responsável são obrigatórios.", variant: "destructive" });
+      // No formulário completo, também usar `formData.responsavelId`.
+      if (!formData.nome || !formData.orgao || !prazoEnvio || !dataJulgamento || !formData.tipo || !formData.responsavelId) {
+        toast({ title: "Erro", description: "Formulário Completo: Nome, Órgão, Prazo Envio, Data Julgamento, Tipo e Responsável ID são obrigatórios.", variant: "destructive" });
         return;
       }
       if (formData.tipo === "produto" && !formData.tipoFaturamento) {
@@ -391,14 +419,16 @@ export function NovaLicitacao({
         valorProposta: formData.valorProposta ? Number(formData.valorProposta.replace(/[^\d,]/g, "").replace(",", ".")) : undefined,
         objeto: formData.descricao,
         dataJulgamento: dataJulgamento ? format(dataJulgamento, "yyyy-MM-dd") : undefined,
+        responsavel_id: formData.responsavelId, // Usar o ID do responsável principal
         tipo: (isSimplifiedForm && !formData.tipo) ? "servico" : formData.tipo,
         documentos: documentosNecessarios.filter(d => d.selecionado).map(d => ({ nome: d.nome, tipo: "checklist" })),
-        responsaveis: responsaveis.filter(r => r.selecionado).map(r => ({ id: r.id, papel: "responsavel" })), // Corrigido para enviar 'id'
+        responsaveis: responsaveis.filter(r => r.selecionado).map(r => ({ id: r.id, papel: "responsavel" })),
         documentosRepositorioIds: documentosRepositorio.map(doc => doc.id),
       };
-      // Remover campos que não devem ir para o payload da API de licitacoes
-      delete (payload as any).nome;
-      delete (payload as any).orgao;
+      delete (payload as any).nome; // 'nome' do form é 'titulo' na API
+      delete (payload as any).orgao; // 'orgao' do form é usado para criar/buscar orgaoId
+      delete (payload as any).responsavel; // 'responsavel' (nome) do form não é enviado, apenas responsavelId
+      delete (payload as any).responsavelId; // 'responsavelId' do form é 'responsavel_id' na API
 
 
       let licitacaoSalva;
@@ -516,9 +546,19 @@ export function NovaLicitacao({
                 <Input id="dataJulgamento" name="dataJulgamento" type="date" className="w-full" value={dataJulgamento ? format(dataJulgamento, "yyyy-MM-dd") : ""} onChange={(e) => setDataJulgamento(e.target.value ? parseISO(e.target.value) : undefined)} required />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="responsavel">Responsável *</Label>
-                <Input id="responsavel" name="responsavel" value={formData.responsavel} onChange={handleInputChange} placeholder="Nome do responsável" required />
+                <Label htmlFor="responsavelId">Responsável Principal *</Label>
+                <Select value={formData.responsavelId} onValueChange={(value) => handleSelectChange("responsavelId", value)}>
+                  <SelectTrigger id="responsavelId">
+                    <SelectValue placeholder="Selecione o responsável principal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {todosResponsaveisApi.map(resp => (
+                      <SelectItem key={resp.id} value={resp.id}>{resp.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              {/* Documentos e Anexos mantidos como estavam */}
               <div className="grid gap-2"><Label className="text-base font-medium">Documentos do Repositório (tag: licitação)</Label><div className="border rounded-md overflow-hidden"><div className="p-3 flex items-center justify-between"><div className="relative flex-1"><Search className="h-4 w-4 absolute left-2.5 top-2.5 text-gray-500" /><Input type="text" placeholder="Buscar documentos..." value={termoBusca} onChange={(e) => setTermoBusca(e.target.value)} className="pl-8 h-9 text-sm"/></div><Badge variant="outline" className="bg-white ml-2">{documentosSelecionados.length} selecionados</Badge></div>{carregandoDocs ? (<div className="p-4 text-center"><div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mx-auto"></div><p className="mt-2 text-sm text-gray-500">Carregando documentos...</p></div>) : documentosFiltrados.length === 0 ? (<div className="p-4 text-center"><p className="text-sm text-gray-500">Nenhum documento encontrado.</p></div>) : (<ScrollArea className="h-[200px]"><div className="divide-y">{documentosFiltrados.map((doc) => (<div key={doc.id} className={`p-2 flex items-start hover:bg-gray-50 cursor-pointer ${documentosSelecionados.includes(doc.id) ? 'bg-blue-50' : ''}`} onClick={() => toggleDocumento(doc.id)}><Checkbox checked={documentosSelecionados.includes(doc.id)} onCheckedChange={() => toggleDocumento(doc.id)} className="mr-2 mt-0.5"/><div className="flex-1 min-w-0"><div className="flex items-center"><FileText className="w-4 h-4 text-blue-500 mr-1.5 flex-shrink-0" /><p className="font-medium text-sm truncate">{doc.nome}</p></div><div className="flex items-center text-xs text-gray-500 mt-0.5"><span>{doc.tipo}</span>{doc.tamanho ? (<><span className="mx-1">•</span><span>{formatarTamanho(doc.tamanho)}</span></>) : null}</div></div>{documentosSelecionados.includes(doc.id) && (<Check className="w-4 h-4 text-green-500 ml-1 flex-shrink-0" />)}</div>))}</div></ScrollArea>)}</div></div>
               <div className="grid gap-2"><Label className="text-base font-medium">Anexar Documentos</Label><div className="border rounded-md p-3"><div className="flex items-center justify-between"><Button variant="outline" size="sm" className="mr-2" type="button" onClick={handleEscolherArquivos}>Escolher arquivos</Button><input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" multiple /><Badge variant="outline" className="bg-white">{arquivosAnexados.length} selecionado(s)</Badge></div>{arquivosAnexados.length > 0 && (<div className="mt-3 space-y-1 border-t pt-2">{arquivosAnexados.map((arquivo, index) => (<div key={index} className="flex items-center text-sm p-1 hover:bg-gray-50 rounded-sm"><FileText className="h-4 w-4 mr-2 text-blue-500" /><span className="truncate max-w-[200px] flex-1">{arquivo.name}</span><span className="text-xs text-muted-foreground ml-1 mr-2">({Math.round(arquivo.size / 1024)} KB)</span><Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleRemoverArquivo(index)}>×</Button></div>))}</div>)}<p className="text-xs text-muted-foreground mt-2">Os documentos serão anexados após criar a licitação</p></div></div>
             </div>
